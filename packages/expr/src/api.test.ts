@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { walk, type ExprNode } from './ast.js';
+import { codePointLength } from './codepoints.js';
 import { closestName, editDistance, formatDiagnostic, diagnostic } from './diagnostics.js';
 import { parse } from './parser.js';
 import { formatType, nonNull, nullable, type ExprType } from './types.js';
@@ -185,9 +186,17 @@ describe('valores', () => {
     // Mensagem de erro não é dump: um canal com mil itens tornaria o diagnóstico
     // ilegível justamente quando ele mais precisa ser lido.
     const longo = formatValue({ texto: 'x'.repeat(500) });
-    expect(longo.length).toBeLessThanOrEqual(60);
+    expect(codePointLength(longo)).toBeLessThanOrEqual(60);
     expect(longo.endsWith('…')).toBe(true);
     expect(formatValue(42)).toBe('42');
     expect(formatValue(null)).toBe('null');
+  });
+
+  it('formatValue não parte um par surrogate ao truncar', () => {
+    // Cortar por unidade UTF-16 deixaria meio caractere na mensagem, que renderiza como
+    // caractere de substituição — ruído justamente onde a legibilidade importa.
+    const truncado = formatValue({ e: '😀'.repeat(40) }, 20);
+    expect(truncado).not.toMatch(/[\uD800-\uDFFF]/u);
+    expect(codePointLength(truncado)).toBeLessThanOrEqual(20);
   });
 });

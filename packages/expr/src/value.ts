@@ -6,6 +6,8 @@
  * canônica não pode circular numa linguagem cujo replay precisa ser byte a byte.
  */
 
+import { codePointLength, sliceCodePoints } from './codepoints.js';
+
 export type ExprValue =
   null | boolean | number | string | readonly ExprValue[] | { readonly [key: string]: ExprValue };
 
@@ -74,5 +76,8 @@ export function valuesEqual(a: ExprValue, b: ExprValue): boolean {
 /** Texto curto de um valor, para mensagem de erro. Trunca — erro não é dump. */
 export function formatValue(value: ExprValue, maxLength = 60): string {
   const text = JSON.stringify(value);
-  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
+  if (codePointLength(text) <= maxLength) return text;
+  // Corta por code point: cortar por unidade UTF-16 no meio de um par surrogate deixaria
+  // um meio-caractere na mensagem, que renderiza como caractere de substituição.
+  return `${sliceCodePoints(text, 0, maxLength - 1)}…`;
 }

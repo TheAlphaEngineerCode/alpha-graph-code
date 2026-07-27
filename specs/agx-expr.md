@@ -195,6 +195,11 @@ canal, esta é a fronteira honesta.
 Onde o schema enxerga por inteiro, vale a garantia forte: expressão verificada só falha por
 aritmética (`AGX-R311`), nunca por tipo. É uma propriedade testada, não uma intenção.
 
+**E na escotilha o interpretador não coage.** `!valor`, `valor && x` e `valor || x` sobre um
+valor não booleano são `AGX-R311`, não `false`. Tratar como falso reintroduziria a coerção
+silenciosa pela porta de trás, justamente no único ponto em que o typechecker não pode ajudar —
+e o efeito seria a branch errada sem sinal nenhum no trace.
+
 ### 5.6 Erro é valor, não exceção
 
 `evaluate()` devolve `{ ok: true, value }` ou `{ ok: false, error }`. **O interpretador nunca
@@ -211,19 +216,19 @@ escaparia do canal `errors` e do trace.
 
 ## 7. Diagnósticos
 
-| Código     | Quando                                                                    |
-| ---------- | ------------------------------------------------------------------------- |
-| `AGX-E301` | Caractere inválido na entrada                                             |
-| `AGX-E302` | Sintaxe inválida                                                          |
-| `AGX-E310` | Caminho desconhecido — com sugestão do nome mais próximo                  |
-| `AGX-E311` | Função fora da lista fechada                                              |
-| `AGX-E312` | Número de argumentos incorreto                                            |
-| `AGX-E320` | Tipo incompatível em operação                                             |
-| `AGX-E321` | Comparação inválida entre tipos, ou `in` sobre string                     |
-| `AGX-E322` | Operação sobre valor possivelmente nulo                                   |
-| `AGX-E330` | Padrão de regex inválido, não suportado, ou não literal                   |
-| `AGX-R310` | Fuel esgotado (runtime)                                                   |
-| `AGX-R311` | Erro aritmético: divisão por zero, overflow, conversão inválida (runtime) |
+| Código     | Quando                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| `AGX-E301` | Caractere inválido na entrada                                                                                   |
+| `AGX-E302` | Sintaxe inválida                                                                                                |
+| `AGX-E310` | Caminho desconhecido — com sugestão do nome mais próximo                                                        |
+| `AGX-E311` | Função fora da lista fechada                                                                                    |
+| `AGX-E312` | Número de argumentos incorreto                                                                                  |
+| `AGX-E320` | Tipo incompatível em operação                                                                                   |
+| `AGX-E321` | Comparação inválida entre tipos, ou `in` sobre string                                                           |
+| `AGX-E322` | Operação sobre valor possivelmente nulo                                                                         |
+| `AGX-E330` | Padrão de regex inválido, não suportado, ou não literal                                                         |
+| `AGX-R310` | Fuel esgotado (runtime)                                                                                         |
+| `AGX-R311` | Divisão por zero, overflow, conversão inválida, ou tipo errado num caminho que o schema não descrevia (runtime) |
 
 `E3xx` são de **validação** — acontecem ao salvar o grafo. `R31x` são de **avaliação** e só
 aparecem com valores em mãos.

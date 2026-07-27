@@ -24,6 +24,8 @@ Isso rotearia para o caminho caro por causa de uma divisão por zero, e o trace 
 
 O erro de **tipo** em runtime tem uma causa só: caminhos que descem em array ou object. O schema declara o canal, não a forma de dentro dele, então `state.documents[0]` pode ser qualquer coisa e o typechecker para de opinar ali. É a fronteira declarada em `specs/agx-expr.md` §5.5.
 
+E nessa fronteira o interpretador **também não coage**: `!valor`, `valor && x` e `valor || x` sobre não booleano são erro, e não `false`. Tratar como falso traria de volta a coerção silenciosa exatamente onde o typechecker não pode ajudar — a branch erraria e o trace mostraria uma decisão legítima.
+
 ## Como corrigir
 
 ```diff

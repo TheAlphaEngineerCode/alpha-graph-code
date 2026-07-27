@@ -85,6 +85,49 @@ describe('avaliação básica', () => {
   });
 });
 
+describe('raiz `in` — entradas mapeadas do nó', () => {
+  // Estes testes faltavam, e a falta escondeu um defeito que zerava o recurso inteiro:
+  // `rootValue` consumia um passo do caminho e o laço de descida supunha outro, então
+  // `in.query` descia `query` duas vezes e **toda** leitura de entrada devolvia null.
+  // Em silêncio, porque `null` é resposta legítima para caminho ausente — só apareceria
+  // na Fase 3, quando o runtime começasse a fazer o binding de verdade.
+  const ev = (source: string, inputs: Record<string, ExprValue>): ExprValue => {
+    const result = evaluate(unwrap(parse(source)), { state: STATE, inputs });
+    if (!result.ok) throw new Error(`${source}: ${result.error.message}`);
+    return result.value;
+  };
+
+  it('lê entrada achatada pelo caminho completo, como graph-core a entrega', () => {
+    expect(ev('in.query', { query: 'abc' })).toBe('abc');
+    expect(ev('in.doc.titulo', { 'doc.titulo': 'Relatório' })).toBe('Relatório');
+    expect(ev('in.itens[0]', { 'itens[0]': 42 })).toBe(42);
+  });
+
+  it('lê entrada aninhada, descendo o resto do caminho', () => {
+    expect(ev('in.doc.titulo', { doc: { titulo: 'Relatório' } })).toBe('Relatório');
+    expect(ev('in.doc.meta.score', { doc: { meta: { score: 9 } } })).toBe(9);
+    expect(ev('in.itens[1]', { itens: ['a', 'b'] })).toBe('b');
+  });
+
+  it('a forma achatada tem precedência sobre a aninhada', () => {
+    // As duas presentes é ambiguidade do chamador, não do grafo. A achatada vence porque
+    // é a que o typechecker verifica — divergir aqui faria validação e execução
+    // discordarem sobre o mesmo caminho.
+    expect(ev('in.a.b', { 'a.b': 'achatada', a: { b: 'aninhada' } })).toBe('achatada');
+  });
+
+  it('entrada ausente resolve para null, e `has` é a pergunta', () => {
+    expect(ev('in.inexistente', { query: 'x' })).toBe(null);
+    expect(ev('has(in.inexistente)', { query: 'x' })).toBe(false);
+    expect(ev('has(in.query)', { query: 'x' })).toBe(true);
+  });
+
+  it('sem entradas no contexto, tudo resolve para null sem quebrar', () => {
+    const result = evaluate(unwrap(parse('in.qualquer')), { state: STATE });
+    expect(result.ok && result.value).toBe(null);
+  });
+});
+
 describe('curto-circuito é semântico, não otimização', () => {
   it('não avalia o lado direito quando o esquerdo já decide', () => {
     // Sem curto-circuito, esta expressão dividiria por zero. Com ele, o guarda funciona
@@ -138,6 +181,38 @@ describe('modelo numérico (ADR-0004)', () => {
     expect(value('bool("true")')).toBe(true);
     expect(value('bool("false")')).toBe(false);
     expect(failure('bool("sim")').code).toBe('AGX-R311');
+  });
+});
+
+describe('nenhum operando é coagido em silêncio', () => {
+  // O typechecker pega quase tudo, mas não o que desce em array/object — ali o tipo é
+  // desconhecido e o valor chega ao interpretador sem garantia (spec §5.5). Este é o
+  // ponto onde a coerção silenciosa voltaria pela porta de trás: `!objeto` valendo
+  // `false` e `objeto && x` valendo `false` produziriam a branch errada sem sinal algum.
+  const naoBooleano = (source: string) => {
+    const result = evaluate(unwrap(parse(source)), { state: STATE });
+    expect(result.ok, `esperava falhar: ${source}`).toBe(false);
+    if (result.ok) throw new Error('inalcançável');
+    expect(result.error.code).toBe('AGX-R311');
+    return result.error;
+  };
+
+  it('`!` sobre não booleano é erro, e não `false`', () => {
+    expect(naoBooleano('!state.documents[0]').message).toContain('espera bool');
+    expect(naoBooleano('!state.confidence').message).toContain('number');
+  });
+
+  it('`&&` e `||` exigem bool nos dois lados', () => {
+    expect(naoBooleano('state.documents[0] && state.approved').message).toContain('espera bool');
+    expect(naoBooleano('state.approved && state.documents[0]').message).toContain('espera bool');
+    expect(naoBooleano('state.documents[0] || state.approved').message).toContain('espera bool');
+  });
+
+  it('o curto-circuito ainda protege o lado direito', () => {
+    // `false && <não booleano>` não é erro: o lado direito não foi avaliado, então a
+    // expressão não observou aquele valor. Curto-circuito continua sendo semântica.
+    const result = evaluate(unwrap(parse('1 > 2 && state.documents[0]')), { state: STATE });
+    expect(result.ok && result.value).toBe(false);
   });
 });
 

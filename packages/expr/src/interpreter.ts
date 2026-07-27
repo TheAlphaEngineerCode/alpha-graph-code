@@ -127,9 +127,14 @@ class Interpreter {
   // -- caminhos ------------------------------------------------------------
 
   private evaluatePath(node: PathNode): ExprValue {
-    let current: ExprValue = this.rootValue(node);
+    const root = this.rootValue(node);
+    let current = root.value;
 
-    for (const step of node.steps.slice(node.root === 'state' || node.root === 'run' ? 1 : 0)) {
+    // `consumed` é do resolvedor, não uma constante daqui. Quando este laço supunha
+    // quantos passos a raiz tinha consumido, `in.query` descia `query` duas vezes e
+    // **toda** leitura de entrada de nó devolvia null — em silêncio, porque `null` é
+    // resposta legítima para caminho ausente.
+    for (const step of node.steps.slice(root.consumed)) {
       if (current === null) return null;
 
       if (step.kind === 'field') {
@@ -143,36 +148,50 @@ class Interpreter {
     return current;
   }
 
-  private rootValue(node: PathNode): ExprValue {
+  /**
+   * Resolve a raiz do caminho, dizendo **quantos passos consumiu**.
+   *
+   * `state` e `run` consomem sempre o primeiro passo. `in` consome todos quando a
+   * entrada vem achatada pelo caminho completo — que é como `graph-core` a entrega, uma
+   * chave por binding declarado.
+   */
+  private rootValue(node: PathNode): { value: ExprValue; consumed: number } {
     const first = node.steps[0];
 
     switch (node.root) {
-      case 'state':
-        if (first?.kind !== 'field') return null;
-        return this.ctx.state[first.name] ?? null;
+      case 'state': {
+        if (first?.kind !== 'field') return { value: null, consumed: 0 };
+        return { value: this.ctx.state[first.name] ?? null, consumed: 1 };
+      }
 
       case 'run': {
-        if (first?.kind !== 'field') return null;
+        if (first?.kind !== 'field') return { value: null, consumed: 0 };
         const run = this.ctx.run ?? {};
         switch (first.name) {
           case 'id':
-            return run.id ?? '';
+            return { value: run.id ?? '', consumed: 1 };
           case 'step':
-            return run.step ?? 0;
+            return { value: run.step ?? 0, consumed: 1 };
           case 'attempt':
-            return run.attempt ?? 0;
+            return { value: run.attempt ?? 0, consumed: 1 };
           default:
-            return null;
+            return { value: null, consumed: 1 };
         }
       }
 
       case 'in': {
         const inputs = this.ctx.inputs ?? {};
-        const path = formatPath(node).slice('in.'.length);
-        // A entrada pode vir achatada por caminho completo ou aninhada. Tentar a chave
-        // completa primeiro faz o caso comum custar uma consulta.
-        const direct = inputs[path];
-        return direct ?? inputs[first?.kind === 'field' ? first.name : ''] ?? null;
+
+        // Caminho completo primeiro: é a forma que o typechecker verifica
+        // (`typeOfInputPath` usa a mesma chave), então é a que precisa concordar.
+        const flattened = formatPath(node).slice('in.'.length);
+        if (Object.prototype.hasOwnProperty.call(inputs, flattened)) {
+          return { value: inputs[flattened] ?? null, consumed: node.steps.length };
+        }
+
+        // Senão, entrada aninhada: consome só o primeiro passo e o laço desce o resto.
+        if (first?.kind !== 'field') return { value: null, consumed: 0 };
+        return { value: inputs[first.name] ?? null, consumed: 1 };
       }
     }
   }
@@ -215,7 +234,16 @@ class Interpreter {
     const value = this.evaluate(node.operand);
     if (this.hasFailed()) return null;
 
-    if (node.operator === '!') return typeof value === 'boolean' ? !value : false;
+    if (node.operator === '!') {
+      // Não booleano aqui é erro, e não `false`. Tratar como falso seria a coerção
+      // silenciosa que a linguagem existe para eliminar — e o caminho é alcançável de
+      // verdade: valor vindo de `state.documents[0]` tem tipo desconhecido, então o
+      // typechecker não pode barrá-lo (specs/agx-expr.md §5.5).
+      if (typeof value !== 'boolean') {
+        return this.fail('AGX-R311', `\`!\` espera bool e recebeu ${kindOf(value)}.`, node.span);
+      }
+      return !value;
+    }
 
     if (typeof value !== 'number') {
       return this.fail('AGX-R311', `\`-\` espera number e recebeu ${kindOf(value)}.`, node.span);
@@ -235,13 +263,19 @@ class Interpreter {
     if (node.operator === '&&' || node.operator === '||') {
       const left = this.evaluate(node.left);
       if (this.hasFailed()) return null;
+      if (typeof left !== 'boolean') return this.failNotBool(node.operator, left, node.left.span);
 
-      const leftBool = left === true;
-      if (node.operator === '&&' && !leftBool) return false;
-      if (node.operator === '||' && leftBool) return true;
+      if (node.operator === '&&' && !left) return false;
+      if (node.operator === '||' && left) return true;
 
+      // O lado direito só é avaliado quando o esquerdo não decidiu — então um valor não
+      // booleano à direita de um curto-circuito nunca chega aqui, e isso é correto: a
+      // expressão não o observou.
       const right = this.evaluate(node.right);
-      return this.hasFailed() ? null : right === true;
+      if (this.hasFailed()) return null;
+      if (typeof right !== 'boolean')
+        return this.failNotBool(node.operator, right, node.right.span);
+      return right;
     }
 
     const left = this.evaluate(node.left);
@@ -263,6 +297,15 @@ class Interpreter {
       default:
         return this.arithmetic(node.operator, left, right, node.operatorSpan);
     }
+  }
+
+  private failNotBool(operator: string, value: ExprValue, span: Span): ExprValue {
+    return this.fail(
+      'AGX-R311',
+      `\`${operator}\` espera bool e recebeu ${kindOf(value)}.`,
+      span,
+      'AGX-Expr não converte valor em booleano. Compare explicitamente.',
+    );
   }
 
   private compare(operator: string, left: ExprValue, right: ExprValue, span: Span): ExprValue {

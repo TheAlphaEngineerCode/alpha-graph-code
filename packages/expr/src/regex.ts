@@ -350,8 +350,18 @@ class PatternParser {
         this.next();
         const highRaw = this.next();
         if (highRaw === undefined) return this.fail('Faixa incompleta na classe.');
-        const high = highRaw === '\\' ? (controlEscape(this.next() ?? '') ?? '') : highRaw;
-        if (high === '' || high < low) {
+
+        let high = highRaw;
+        if (highRaw === '\\') {
+          const escaped = this.next();
+          if (escaped === undefined) return this.fail('Escape incompleto na faixa.');
+          // Escape que não é de controle vale como literal — `[a-\]]` é faixa válida.
+          // Antes isto virava string vazia e caía em "faixa invertida", que aponta para
+          // o problema errado.
+          high = controlEscape(escaped) ?? escaped;
+        }
+
+        if (high < low) {
           return this.fail(`Faixa invertida na classe: \`${low}-${high}\`.`);
         }
         items.push({ kind: 'range', from: low, to: high });

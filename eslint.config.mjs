@@ -72,7 +72,6 @@ export default tseslint.config(
     rules: {
       ...noDynamicEvaluation,
       eqeqeq: ['error', 'always', { null: 'ignore' }],
-      'no-console': 'off',
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { prefer: 'type-imports', fixStyle: 'separate-type-imports' },

@@ -12,7 +12,10 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['packages/*/src/**/*.ts', 'packages/exporters/*/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/index.ts'],
+      // Só o próprio teste sai da conta. `index.ts` fica: hoje é reexportação,
+      // mas nada impede lógica de entrar lá depois — e aí ela sairia do relatório
+      // sem ninguém decidir isso.
+      exclude: ['**/*.test.ts'],
       // Critério de aceite 06 do blueprint: branch coverage >= 85% em core e compiler.
       // O limite passa a ser exigido quando os pacotes tiverem código (Fase 1).
       thresholds: {

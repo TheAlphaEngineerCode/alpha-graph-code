@@ -53,15 +53,16 @@ function findPackageDirs(): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name === 'dist') continue;
       const full = join(dir, entry.name);
-      if (exists(join(relative(ROOT, full), 'package.json'))) {
-        found.push(relative(ROOT, full).split(sep).join('/'));
-      }
+      const rel = relative(ROOT, full).split(sep).join('/');
+      if (exists(`${rel}/package.json`)) found.push(rel);
       walk(full);
     }
   };
   walk(join(ROOT, 'packages'));
   return found.sort();
 }
+
+const packageDirs = findPackageDirs();
 
 /** Todo arquivo .ts sob src/ dos pacotes, em caminho relativo com '/'. */
 function findSourceFiles(): string[] {
@@ -77,14 +78,13 @@ function findSourceFiles(): string[] {
       }
     }
   };
-  for (const pkg of findPackageDirs()) {
-    const src = join(ROOT, pkg, 'src');
-    if (exists(join(pkg, 'src'))) walk(src);
+  for (const pkg of packageDirs) {
+    if (exists(`${pkg}/src`)) walk(join(ROOT, pkg, 'src'));
   }
   return found.sort();
 }
 
-const packageDirs = findPackageDirs();
+const sourceFiles = findSourceFiles();
 
 describe('invariante 3 — nenhuma avaliação dinâmica', () => {
   // Cada padrão é uma rota conhecida para executar string como código. `constructor` de
@@ -99,17 +99,15 @@ describe('invariante 3 — nenhuma avaliação dinâmica', () => {
     ['constructor de literal', /['"`]\s*\.\s*constructor/],
   ];
 
-  const sources = findSourceFiles();
-
   it('encontra arquivos de origem para varrer', () => {
     // Sem esta asserção, um bug no walker faria a varredura passar sobre lista vazia —
     // o teste ficaria verde exatamente por não ter olhado nada.
-    expect(sources.length).toBeGreaterThan(0);
+    expect(sourceFiles.length).toBeGreaterThan(0);
   });
 
   for (const [label, pattern] of FORBIDDEN) {
     it(`nenhum \`${label}\` em packages/**/src`, () => {
-      const offenders = sources.filter((file) => pattern.test(readText(file)));
+      const offenders = sourceFiles.filter((file) => pattern.test(readText(file)));
       expect(offenders).toEqual([]);
     });
   }
@@ -146,7 +144,7 @@ describe('invariante 9 — o núcleo não depende de UI nem de SDK de provider',
 
   it('nenhum import de React ou Next nos fontes do núcleo', () => {
     const pattern = /from\s+['"](?:react|react-dom|next)(?:\/[^'"]*)?['"]/;
-    const offenders = findSourceFiles()
+    const offenders = sourceFiles
       .filter((file) => CORE_PACKAGES.some((pkg) => file.startsWith(`${pkg}/`)))
       .filter((file) => pattern.test(readText(file)));
     expect(offenders).toEqual([]);

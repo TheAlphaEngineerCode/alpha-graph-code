@@ -20,7 +20,7 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm run build",
-    "clean": "turbo run clean && rimraf node_modules/.cache/turbo"
+    "clean": "turbo run clean && rimraf .turbo"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

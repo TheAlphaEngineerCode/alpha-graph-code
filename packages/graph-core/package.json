@@ -1,0 +1,33 @@
+{
+  "name": "@alpha-graph/graph-core",
+  "version": "0.1.0-dev",
+  "description": "Alpha Graph IR: tipos, JSON Schema, parser, validador, normalização, serialização canônica e migrations.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@alpha-graph/expr": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheAlphaEngineerCode/alpha-graph-code.git",
+    "directory": "packages/graph-core"
+  }
+}

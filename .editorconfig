@@ -1,0 +1,20 @@
+# O perfil canônico da IR exige UTF-8, LF e 2 espaços (specs/ir-v1.md §9).
+# O editor concorda com isso desde o começo, para não haver diff de estilo entre
+# quem escreve o grafo e quem escreve o compilador.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown usa dois espaços em fim de linha como quebra explícita.
+trim_trailing_whitespace = false
+
+[LICENSE]
+insert_final_newline = false
+trim_trailing_whitespace = false

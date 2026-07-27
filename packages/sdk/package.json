@@ -1,0 +1,35 @@
+{
+  "name": "@alpha-graph/sdk",
+  "version": "0.1.0-dev",
+  "description": "Superfície pública estável para consumidores externos e plugins de exporter.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@alpha-graph/compiler": "workspace:*",
+    "@alpha-graph/graph-core": "workspace:*",
+    "@alpha-graph/runtime": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheAlphaEngineerCode/alpha-graph-code.git",
+    "directory": "packages/sdk"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@alpha-graph/ui",
+  "version": "0.1.0-dev",
+  "description": "Componentes de canvas e inspector consumidos por apps/web.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@alpha-graph/graph-core": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheAlphaEngineerCode/alpha-graph-code.git",
+    "directory": "packages/ui"
+  }
+}

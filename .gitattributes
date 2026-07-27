@@ -1,0 +1,17 @@
+# Serialização canônica usa LF (specs/ir-v1.md §4.11). O repositório precisa
+# concordar com isso, ou o round-trip byte a byte falha só no Windows.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Cassettes e goldens são comparados byte a byte: nenhuma normalização.
+cassettes/** -text
+**/__golden__/** -text
+
+pnpm-lock.yaml linguist-generated=true

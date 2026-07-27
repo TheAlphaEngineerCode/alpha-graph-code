@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "packages/exporters/*"
+  - "apps/*"
+fetchRetries: 6
+fetchTimeout: 600000
+networkConcurrency: 4

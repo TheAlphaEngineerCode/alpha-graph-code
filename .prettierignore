@@ -1,0 +1,12 @@
+dist/
+coverage/
+node_modules/
+.turbo/
+*.tsbuildinfo
+pnpm-lock.yaml
+LICENSE
+
+# Cassettes e artefatos golden são gravados byte a byte: formatar quebraria a
+# própria propriedade que eles existem para provar (ver specs/trace-v1.md).
+cassettes/
+**/__golden__/

@@ -26,7 +26,8 @@ pnpm install
 pnpm check            # lint + format + typecheck + test + build
 ```
 
-Requer Node `>=20.19.0`. A versão do pnpm está fixada em `packageManager`.
+Requer Node `>=22.13.0` — é o piso do pnpm 11, não uma escolha nossa. A versão do pnpm está
+fixada em `packageManager`.
 
 ## Portão de qualidade
 

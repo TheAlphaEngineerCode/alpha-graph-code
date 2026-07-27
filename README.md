@@ -111,7 +111,7 @@ O canvas amplia o público depois. Ele não é o que conquista o primeiro.
 git clone https://github.com/TheAlphaEngineerCode/alpha-graph-code.git
 cd alpha-graph-code
 
-npm i -g pnpm     # se necessário; requer Node >= 20.19
+npm i -g pnpm     # se necessário; requer Node >= 22.13
 pnpm install
 pnpm check        # lint + format + typecheck + test + build
 ```
@@ -128,7 +128,7 @@ pnpm agx compile  templates/planner-executor-verifier.yaml --target langgraph
 
 ## Como o repositório é organizado
 
-```
+```text
 packages/expr        AGX-Expr: lexer, parser, typechecker, interpretador
 packages/graph-core  IR, schema, parser, validador, normalização, migrations
 packages/runtime     executor, reducers, checkpoints, cassettes, trace

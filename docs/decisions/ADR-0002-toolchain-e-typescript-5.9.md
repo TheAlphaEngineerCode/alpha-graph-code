@@ -80,7 +80,20 @@ escrito, custa uma refatoração; ligar antes custa nada.
 ## Consequências
 
 - Quem clonar o repositório precisa de pnpm. `packageManager` no `package.json` fixa a
-  versão; `engines.node` exige `>=20.19.0`.
+  versão; `engines.node` exige `>=22.13.0`.
+
+  **Este número foi corrigido pelo CI, não escolhido.** A primeira versão declarava
+  `>=20.19.0` e a matriz testava Node 20, 22 e 24. O job do Node 20 falhou com
+  `This version of pnpm requires at least Node.js v22.13` — ou seja, eu tinha anunciado um
+  piso que o gerenciador de pacotes fixado neste mesmo arquivo não sustenta. Local não
+  acusaria: esta máquina roda Node 24.
+
+  A lição operacional é sobre a matriz, não sobre o número: **matriz de versão só vale se a
+  versão mais baixa realmente for exercitada.** Se eu tivesse testado só o Node 24, o
+  `engines` falso teria ido para o `README` e para o `CONTRIBUTING`, e quebraria na máquina
+  do primeiro contribuidor — que leria "requer Node >= 20.19", instalaria Node 20 e não
+  conseguiria nem rodar `pnpm install`.
+
 - `fetchTimeout` e `fetchRetries` elevados em `pnpm-workspace.yaml`: o install da Fase 0
   falhou por timeout de rede a ~30 KiB/s, e um install que quebra por rede lenta é atrito
   desnecessário para contribuidor e para CI.

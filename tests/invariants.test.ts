@@ -213,6 +213,50 @@ describe('coerência do bootstrap', () => {
   });
 });
 
+describe('todo diagnóstico emitido tem página (critério de aceite 08)', () => {
+  // O critério diz "100% dos códigos emitidos têm página". Escrito só no plano, ele
+  // envelhece: alguém acrescenta um código na Fase 2 e ninguém percebe. Aqui o código
+  // emitido é extraído do fonte, e a suíte falha se a página não existir.
+  const emitted = (): string[] => {
+    const codes = new Set<string>();
+    for (const file of findSourceFiles()) {
+      if (file.endsWith('.test.ts')) continue;
+      for (const match of readText(file).matchAll(/'(AGX-[ERW]\d{3})'/gu)) {
+        const code = match[1];
+        if (code !== undefined) codes.add(code);
+      }
+    }
+    return [...codes].sort();
+  };
+
+  it('encontra códigos emitidos para verificar', () => {
+    // Sem isto, um regex que parasse de casar faria a checagem passar sobre lista vazia.
+    expect(emitted().length).toBeGreaterThan(0);
+  });
+
+  it('cada código emitido tem página em docs/diagnostics', () => {
+    const missing = emitted().filter((code) => !exists(`docs/diagnostics/${code}.md`));
+    expect(missing).toEqual([]);
+  });
+
+  it('cada página traz as quatro seções obrigatórias', () => {
+    for (const code of emitted()) {
+      const page = readText(`docs/diagnostics/${code}.md`);
+      for (const section of [
+        '## O que aconteceu',
+        '## Por que isso é um problema',
+        '## Como corrigir',
+        '## Quando o erro é o esperado',
+      ]) {
+        expect(page, `${code} sem "${section}"`).toContain(section);
+      }
+      // Uma página de três linhas satisfaria "existe" sem ajudar ninguém — que é
+      // exatamente o defeito que a exigência de página existe para corrigir.
+      expect(page.length, code).toBeGreaterThan(800);
+    }
+  });
+});
+
 describe('a camada normativa existe e está referenciada', () => {
   for (const spec of SPECS) {
     it(`specs/${spec} existe e se declara normativo`, () => {

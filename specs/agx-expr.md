@@ -70,10 +70,47 @@ now()
 `now()` é **determinístico**: retorna o clock injetado do run, nunca o relógio real. Sem
 isso, replay não reproduziria o mesmo trace.
 
-`matches(s, re)` recebe uma expressão regular. **`[LACUNA]`** — o dialeto e a defesa contra
-catastrophic backtracking são decididos na Fase 1, com ADR. Um regex engine com
-backtracking exponencial derrotaria a propriedade de totalidade pela porta de trás, então
-esta função não entra antes dessa decisão.
+### 3.1 Assinaturas
+
+`T` é qualquer tipo; `T?` é `T | null` (§5). Onde o parâmetro é `T` e o argumento é `T?`, o
+type-check falha com `AGX-E322` — a saída é `coalesce`.
+
+| Função                                | Assinatura                                       | Nota                                            |
+| ------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| `len(x)`                              | `(string \| array \| object) → number`           | caracteres, itens ou chaves                     |
+| `has(p)`                              | `(path) → bool`                                  | única função que aceita caminho ausente ou nulo |
+| `matches(s, re)`                      | `(string, string literal) → bool`                | `re` **DEVE** ser literal (§3.2)                |
+| `lower(s)` / `upper(s)`               | `(string) → string`                              |                                                 |
+| `coalesce(a, b)`                      | `(T?, T) → T`                                    | único caminho de `T?` para `T`                  |
+| `startsWith(s, p)` / `endsWith(s, p)` | `(string, string) → bool`                        |                                                 |
+| `contains(a, b)`                      | `(string, string) → bool` ou `(array, T) → bool` | substring ou pertencimento                      |
+| `int(x)`                              | `(number \| string \| bool) → number`            | trunca em direção a zero                        |
+| `float(x)`                            | `(number \| string \| bool) → number`            |                                                 |
+| `bool(x)`                             | `(bool \| number \| string) → bool`              |                                                 |
+| `now()`                               | `() → number`                                    | ms desde a época, do clock injetado             |
+
+### 3.2 `matches(s, re)`
+
+Decidido em [ADR-0003](../docs/decisions/ADR-0003-regex-sem-backtracking.md).
+
+O motor é **próprio, por simulação de NFA**, com custo **O(n × m)** garantido por construção —
+sem backtracking, e portanto sem entrada patológica. Um motor com backtracking derrotaria a
+totalidade pela porta de trás: `(a+)+$` contra 30 caracteres já explora ~2³⁰ caminhos, e o
+arquivo de grafo é entrada não confiável por design.
+
+O padrão **DEVE ser um literal de string**. `matches(s, state.pattern)` é `AGX-E330`. Com
+isso, a regex é compilada e validada **em tempo de validação do grafo** — padrão inválido
+falha ao salvar, não em produção — e não existe caminho de dado do estado até autômato novo.
+
+Suportado: literais e escapes, `.`, classes (`[a-z]`, `[^0-9]`, `\d \w \s` e negados), âncoras
+`^` `$`, `*` `+` `?` `{n,m}`, alternação e agrupamento. Não há captura — `matches` devolve
+`bool`.
+
+Recusado com `AGX-E330`, explicitamente e não como literal: backreference, lookahead,
+lookbehind, quantificador preguiçoso, grupo nomeado e flags. `{n,m}` tem teto de **1000** em
+`m`, senão o ataque só migra do tempo de busca para o de compilação.
+
+`.` casa **um code point**, não um grafema: emoji composto conta como mais de um.
 
 ## 4. Type-check contra o schema de canais
 
@@ -85,7 +122,86 @@ Numa linguagem dinâmica, a mesma expressão viraria `undefined < 0.8 === false`
 errado, silencioso, em produção. Isto sozinho é argumento suficiente para não usar
 JavaScript como linguagem de condição.
 
-## 5. Propriedades a provar por teste (Fase 1)
+## 5. Tipos, nulidade e operadores
+
+Decidido em [ADR-0004](../docs/decisions/ADR-0004-modelo-numerico.md) e
+[ADR-0005](../docs/decisions/ADR-0005-nulidade-igualdade-ordenacao.md).
+
+### 5.1 Nulidade faz parte do tipo
+
+Um canal declarado `{ type: string, initial: null }` tem tipo **`string | null`**, não
+`string`. O typechecker carrega isso, senão aceitaria `state.query + "!"` e entregaria
+`"null!"` em produção.
+
+| Operação sobre `T \| null`                         |                   |
+| -------------------------------------------------- | ----------------- |
+| `==` / `!=` contra `null` ou contra valor de `T`   | ✅ devolve `bool` |
+| `<` `<=` `>` `>=`, aritmética, argumento de função | ❌ `AGX-E322`     |
+
+A assimetria é deliberada: _"isto foi preenchido?"_ é pergunta bem definida; `null < 5` não é,
+e as três respostas possíveis produzem grafos que roteiam errado sem avisar. A saída é
+`coalesce(state.x, 0)`, que obriga a **declarar o que o ausente significa**.
+
+`[LACUNA]` — não há narrowing sensível a fluxo: `state.x != null && state.x > 5` é erro, mesmo
+sendo seguro. Fica para a Fase 2, quando der para medir o atrito sobre grafos reais. É o lado
+que se afrouxa depois sem quebrar grafo salvo.
+
+### 5.2 Igualdade e ordenação
+
+- **Igualdade exige tipos compatíveis.** `state.count == "3"` é `AGX-E321`, não `false`.
+- Igualdade de `array` e `object` é **estrutural**, nunca por referência.
+- **Ordenação só para `number` e `string`.** `string` compara por **code point**, não por
+  localidade — ordem dependente de locale quebraria o replay byte a byte.
+- `bool`, `array`, `object` e `null` não são ordenáveis: `AGX-E321`.
+
+### 5.3 `in` é pertencimento, e nunca substring
+
+`x in array` (por igualdade estrutural) e `"k" in object` (chave existe). `"ab" in "abc"` é
+`AGX-E321`, com a sugestão de usar `contains`. Um operador cujo sentido muda conforme o tipo
+do operando muda de sentido quando alguém edita o tipo de um canal — e o typechecker aprovaria
+as duas leituras.
+
+### 5.4 Números: sem `NaN`, sem `Infinity`
+
+Um só tipo `number` (IEEE-754 double). **Nenhuma expressão bem-sucedida pode produzir `NaN` ou
+`Infinity`**: divisão por zero, overflow e conversão inválida são erro de avaliação
+`AGX-R311`.
+
+O motivo é que esses valores se propagam calados até virarem rota:
+`state.cost / state.calls >= 0.5` com `calls == 0` daria `Infinity >= 0.5` → `true`, e o trace
+registraria uma branch tomada sem sinal nenhum de que a conta não fecha.
+
+Comparação é exata, **sem epsilon**: `0.1 + 0.2 == 0.3` é `false`. Tolerância implícita
+tornaria `==` não transitivo, e transitividade quebrada num operador que decide roteamento é
+pior que a surpresa do ponto flutuante.
+
+Underflow para zero é permitido — perde precisão, não inverte comparação.
+
+### 5.5 O que o typechecker não alcança
+
+O schema descreve **canais**, não a forma de dentro deles. Ao descer em array ou object —
+`state.documents[0].title` — o tipo do resultado passa a ser **desconhecido**, e a
+verificação para de opinar dali para cima.
+
+A consequência precisa ser dita: **nesses caminhos, um erro de tipo chega ao runtime** como
+`AGX-R311`. `-state.documents[0]` é aceito na validação e falha ao avaliar, se o item for um
+objeto.
+
+A alternativa seria o typechecker fingir que sabe — assumir `string`, por exemplo — e aí ele
+aprovaria comparações que não pode garantir, o que é pior: erro que vira `false` silencioso
+em vez de erro que aparece. Enquanto a IR não permitir declarar a forma de dentro de um
+canal, esta é a fronteira honesta.
+
+Onde o schema enxerga por inteiro, vale a garantia forte: expressão verificada só falha por
+aritmética (`AGX-R311`), nunca por tipo. É uma propriedade testada, não uma intenção.
+
+### 5.6 Erro é valor, não exceção
+
+`evaluate()` devolve `{ ok: true, value }` ou `{ ok: false, error }`. **O interpretador nunca
+lança.** Uma exceção atravessando o interpretador seria a única falha do sistema sem `kind`, e
+escaparia do canal `errors` e do trace.
+
+## 6. Propriedades a provar por teste (Fase 1)
 
 - Toda expressão que faz parse **termina** dentro do limite de fuel.
 - Expressão mal tipada é rejeitada **em tempo de checagem**, nunca em tempo de execução.
@@ -93,12 +209,33 @@ JavaScript como linguagem de condição.
 - Nenhuma entrada — inclusive malformada, unicode ou numericamente extrema — faz o parser
   lançar exceção não tratada. Erro é valor de retorno, não crash.
 
-## 6. Lacunas declaradas
+## 7. Diagnósticos
 
-- **Precisão numérica.** Se `1e308 * 10` é erro, `Infinity` ou saturação, decide-se na Fase
-  1 com ADR. Números da IR usam a menor representação que faz round-trip (ir-v1 §9), e a
-  aritmética precisa concordar com isso.
-- **Semântica de `in`.** Vale para array e para chave de objeto; o comportamento sobre
-  string (substring ou erro) fica para a Fase 1.
-- **Comparação entre tipos diferentes.** A intenção é **erro de type-check**, não coerção.
-  Confirmar na Fase 1 junto do typechecker.
+| Código     | Quando                                                                    |
+| ---------- | ------------------------------------------------------------------------- |
+| `AGX-E301` | Caractere inválido na entrada                                             |
+| `AGX-E302` | Sintaxe inválida                                                          |
+| `AGX-E310` | Caminho desconhecido — com sugestão do nome mais próximo                  |
+| `AGX-E311` | Função fora da lista fechada                                              |
+| `AGX-E312` | Número de argumentos incorreto                                            |
+| `AGX-E320` | Tipo incompatível em operação                                             |
+| `AGX-E321` | Comparação inválida entre tipos, ou `in` sobre string                     |
+| `AGX-E322` | Operação sobre valor possivelmente nulo                                   |
+| `AGX-E330` | Padrão de regex inválido, não suportado, ou não literal                   |
+| `AGX-R310` | Fuel esgotado (runtime)                                                   |
+| `AGX-R311` | Erro aritmético: divisão por zero, overflow, conversão inválida (runtime) |
+
+`E3xx` são de **validação** — acontecem ao salvar o grafo. `R31x` são de **avaliação** e só
+aparecem com valores em mãos.
+
+## 8. Lacunas declaradas
+
+As quatro lacunas da versão anterior foram fechadas por ADR-0003, ADR-0004 e ADR-0005. As que
+restam:
+
+- **Narrowing sensível a fluxo.** `state.x != null && state.x > 5` é `AGX-E322` hoje, mesmo
+  sendo seguro. Fase 2, com o atrito já medido sobre grafos reais.
+- **Unicode por grafema.** `len()` e `.` contam **code points**. Emoji composto conta como
+  mais de um. Mudar isso depois é mudança de semântica observável e exigiria bump de versão.
+- **Normalização de string.** `"é"` pré-composto e decomposto são strings diferentes para
+  `==`. Se a IR passar a normalizar em NFC na serialização canônica, esta seção acompanha.

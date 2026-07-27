@@ -16,13 +16,17 @@ export default defineConfig({
       // mas nada impede lógica de entrar lá depois — e aí ela sairia do relatório
       // sem ninguém decidir isso.
       exclude: ['**/*.test.ts'],
-      // Critério de aceite 06 do blueprint: branch coverage >= 85% em core e compiler.
-      // O limite passa a ser exigido quando os pacotes tiverem código (Fase 1).
+      // Critério de aceite 06: branch coverage >= 85% em core e compiler. Ligado na
+      // Fase 1, quando passou a existir código para cobrir.
+      //
+      // O limite é o do critério, não o número atual (88%). Fixá-lo no valor de hoje
+      // transformaria toda queda em falha de build, e o efeito prático seria alguém
+      // baixar o número para destravar — que é como um limite de cobertura apodrece.
       thresholds: {
-        branches: 0,
-        functions: 0,
-        lines: 0,
-        statements: 0,
+        branches: 85,
+        functions: 85,
+        lines: 85,
+        statements: 85,
       },
     },
   },

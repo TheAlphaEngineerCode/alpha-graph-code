@@ -47,8 +47,10 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Testes
-        run: pnpm run test
+      # Com cobertura, não sem: o limite de 85% do critério de aceite 06 está em
+      # `vitest.config.ts`, e limite que o CI não executa não é limite.
+      - name: Testes e cobertura
+        run: pnpm run coverage
 
       - name: Build
         run: pnpm run build

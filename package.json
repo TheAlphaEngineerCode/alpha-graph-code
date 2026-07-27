@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm run build",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run coverage && pnpm run build",
     "clean": "turbo run clean && rimraf .turbo"
   },
   "devDependencies": {
@@ -27,6 +27,7 @@
     "@vitest/coverage-v8": "4.1.10",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
+    "fast-check": "^4.9.0",
     "prettier": "3.9.6",
     "rimraf": "6.0.1",
     "turbo": "2.10.7",

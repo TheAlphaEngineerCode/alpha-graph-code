@@ -96,7 +96,19 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'error',
       '@typescript-eslint/no-unsafe-member-access': 'error',
       '@typescript-eslint/no-unsafe-return': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      // Um `switch` com `default` já é exaustivo. Exigir todo membro da união listado
+      // ao lado de um `default` obriga a duplicar o caso trivial — o valor da regra
+      // está no `switch` que *não* tem saída para o caso novo.
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+      // `while (true)` com `break` interno é a forma legível de escrever laço de lexer
+      // e de parser. O resto da regra continua valendo, e é ela que pega checagem morta.
+      '@typescript-eslint/no-unnecessary-condition': [
+        'error',
+        { allowConstantLoopConditions: true },
+      ],
       // Invariante 9: o núcleo não importa React, Next.js nem SDK de provider.
       'no-restricted-imports': [
         'error',

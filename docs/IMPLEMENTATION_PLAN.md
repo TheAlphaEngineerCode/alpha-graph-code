@@ -2,8 +2,8 @@
 
 |                |                                                 |
 | -------------- | ----------------------------------------------- |
-| **Fase atual** | **0 — Fundação** ✅ concluída em 2026-07-27     |
-| **Próxima**    | 1 — AGX-Expr                                    |
+| **Fase atual** | **1 — AGX-Expr** ✅ concluída em 2026-07-27     |
+| **Próxima**    | 2 — Graph Core                                  |
 | **Estratégia** | Headless-first. O canvas **não** entra na v0.1. |
 
 ## Por que headless-first
@@ -22,9 +22,9 @@ core é barato. Descobrir com 4 mil de core mais 12 mil de canvas, não.
 
 ## Regra de avanço
 
-Ao fim de cada fase: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` — ou
-`pnpm check`, que roda os quatro. **Critério de saída não atendido = não se avança.** Débito
-não passa de fase.
+Ao fim de cada fase: **`pnpm check`** — lint, formato, typecheck, testes com cobertura e
+build, na mesma ordem em que o CI roda. **Critério de saída não atendido = não se avança.**
+Débito não passa de fase.
 
 Entre fases, rodar a auditoria: invariantes violados, placeholder no caminho crítico,
 diagnóstico sem página de documentação, `any` no núcleo, e teste que passa sem asserção
@@ -48,32 +48,52 @@ Nenhuma feature.
   3 (avaliação dinâmica), 9 (isolamento do núcleo) e 10 (zero `any`)
 - Prettier, Vitest 4, `tests/invariants.test.ts` guardando os invariantes 3, 9 e 10 por teste
   além do lint
-- CI GitHub Actions com matriz de Node (20, 22, 24) + verificação de DCO em PR
+- CI GitHub Actions com matriz de Node (22, 24) + verificação de DCO em PR
 - `specs/ir-v1.md`, `agx-expr.md`, `trace-v1.md`, `lowerings.md`
 - Apache-2.0 + `NOTICE`, `CONTRIBUTING.md` com DCO, `SECURITY.md`
 
-**Critério de saída:** `pnpm check` verde nas três versões de Node do CI. ✅
+**Critério de saída:** `pnpm check` verde nas versões de Node do CI. ✅
 
 **O que a Fase 0 deliberadamente não tem:** nenhuma linha de implementação. Os
 `src/index.ts` dos 12 pacotes são módulos vazios — não placeholders de implementação.
 
 ---
 
-### Fase 1 — AGX-Expr
+### Fase 1 — AGX-Expr ✅
 
-`packages/expr`, isolado, **sem dependência de `graph-core`**. Lexer, parser, AST,
-typechecker contra um schema de canais fornecido, interpretador com limite de fuel.
-Biblioteca padrão fechada conforme [`specs/agx-expr.md`](../specs/agx-expr.md).
+`packages/expr`, isolado, **sem dependência de `graph-core`**.
 
-**Critério de saída:**
+**Entregue:** lexer por code point, parser de descida recursiva com limite de
+profundidade, printer com round-trip, motor de regex próprio por simulação de NFA,
+typechecker com nulidade no tipo e sugestão de nome, interpretador com fuel, biblioteca
+padrão fechada de 13 funções. 244 testes, branch coverage 88%.
 
-- Property test: toda expressão que faz parse **termina** dentro do limite de fuel
-- Expressão mal tipada é rejeitada **em tempo de checagem**, não de execução
-- `print(parse(s))` reparseia para a mesma AST
-- Nenhuma entrada — malformada, unicode, numericamente extrema — faz o parser lançar exceção
-  não tratada
-- Lacunas de `agx-expr.md` §6 resolvidas por ADR: dialeto de regex, precisão numérica,
-  semântica de `in`, comparação entre tipos diferentes
+**As quatro lacunas fecharam por ADR** antes do código: ADR-0003 (regex sem backtracking,
+padrão literal obrigatório), ADR-0004 (sem `NaN`, sem `Infinity`, erro é valor) e
+ADR-0005 (nulidade, igualdade, ordenação e `in`).
+
+**Critério de saída — atendido:**
+
+- ✅ Toda expressão que faz parse termina dentro do fuel (property test)
+- ✅ Expressão mal tipada é rejeitada em tempo de checagem
+- ✅ `print(parse(s))` reparseia para a mesma AST, e é idempotente
+- ✅ Nenhuma entrada faz o parser lançar — inclusive malformada, unicode fora do BMP,
+  numericamente extrema e com 100 mil níveis de aninhamento
+- ✅ Os 11 diagnósticos emitidos têm página em `docs/diagnostics/`, verificado por teste
+
+**Três defeitos foram encontrados por teste de propriedade, e nenhum por exemplo:**
+
+1. `coalesce("", 0)` passava no typecheck anunciando `number` e devolvia `""` — a
+   assinatura `(T?, T) → T` do ADR-0005 não estava sendo verificada **entre** os dois
+   argumentos.
+2. Span de diagnóstico apontava além do fim da entrada quando uma string não fechava.
+3. Descer em array/object deixa erro de tipo chegar ao runtime. Não era corrigível — o
+   schema descreve o canal, não a forma de dentro — então virou limitação declarada em
+   `specs/agx-expr.md` §5.5, com teste que a documenta.
+
+E um quarto, achado ao cobrir a API pública: a descida recursiva estourava a pilha com
+~2000 níveis de parêntese, e `RangeError` **escapa do `Result`** — quebrando a promessa
+de que analisar nunca lança, num caminho que recebe arquivo de terceiro.
 
 ---
 
@@ -208,9 +228,10 @@ Todos automatizáveis; nenhum depende de julgamento subjetivo.
 | 12  | Acessibilidade               | Fluxo por teclado + contraste               | WCAG AA no core              | 9    |
 | 13  | Migrations                   | Carregar fixture de cada versão anterior    | 100% sem perda               | 2    |
 
-O limite de cobertura (06) está em `vitest.config.ts` com valor **0** hoje e passa a valer na
-Fase 1, quando existir código. Deixar 85% configurado sem código faria a suíte falhar por
-motivo falso — e limite que falha por motivo falso é limite que alguém baixa.
+O limite de cobertura (06) foi ligado na **Fase 1**, quando passou a existir código: 85% em
+`vitest.config.ts`, e o `check` roda `coverage` em vez de `test` para que o CI de fato o
+execute. Está em 88% hoje. O limite é o do critério, não o número atual — fixá-lo no valor
+de hoje faria toda queda quebrar o build, e o efeito prático seria alguém baixar o número.
 
 ---
 

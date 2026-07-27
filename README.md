@@ -11,7 +11,7 @@ Quem executa em produção é o runtime **do usuário**.
 [![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue.svg)](./LICENSE)
 [![DCO](https://img.shields.io/badge/contribui%C3%A7%C3%A3o-DCO-lightgrey.svg)](./CONTRIBUTING.md)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](./tsconfig.base.json)
-[![Fase](https://img.shields.io/badge/fase-0%20%C2%B7%20funda%C3%A7%C3%A3o-orange.svg)](./docs/IMPLEMENTATION_PLAN.md)
+[![Fase](https://img.shields.io/badge/fase-1%20%C2%B7%20AGX--Expr-orange.svg)](./docs/IMPLEMENTATION_PLAN.md)
 
 </div>
 
@@ -19,16 +19,17 @@ Quem executa em produção é o runtime **do usuário**.
 
 ## Estado atual: leia antes de clonar
 
-**Este repositório está na Fase 0.** Existe tooling, CI e a especificação normativa completa.
-**Não existe implementação** — os 12 pacotes são módulos vazios, e o CLI `agx` chega na Fase 4.
+**Este repositório está na Fase 1 de 9.** Existe a especificação normativa completa, o
+tooling, o CI — e **um pacote implementado**: [`packages/expr`](./packages/expr), a linguagem
+de condição AGX-Expr, com 244 testes.
 
-Está publicado assim de propósito: a decisão que mais importa neste projeto é a **semântica da
-IR**, e ela é revisável agora, por leitura, enquanto custa nada mudar. Depois de 4 mil linhas
-de core, não é.
+Os outros 11 pacotes são módulos vazios. **O CLI `agx` chega na Fase 4**, e é lá que o produto
+passa a ser demonstrável. Se você quer algo que rode hoje, volte nessa fase; o
+[plano de implementação](./docs/IMPLEMENTATION_PLAN.md) diz o que existe em cada uma.
 
-Se você quer algo que rode hoje, volte na Fase 4 — o marco em que
-`agx simulate` executa um workflow com trace reproduzível. O
-[plano de implementação](./docs/IMPLEMENTATION_PLAN.md) diz o que existe em cada fase.
+A ordem é deliberada: a decisão que mais importa neste projeto é a **semântica da IR**, e ela
+é revisável agora, por leitura, enquanto custa nada mudar. Depois de 4 mil linhas de core,
+não é.
 
 ---
 

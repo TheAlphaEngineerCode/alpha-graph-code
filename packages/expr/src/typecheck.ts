@@ -13,7 +13,10 @@ import {
   closestName,
   diagnostic,
   err,
+  msg,
+  msg0,
   ok,
+  type MessageRef,
   type Diagnostic,
   type Result,
   type Span,
@@ -74,9 +77,9 @@ class Typechecker {
 
   private report(
     code: Parameters<typeof diagnostic>[0],
-    message: string,
+    message: MessageRef,
     span: Span,
-    suggestion?: string,
+    suggestion?: MessageRef,
   ): ExprType {
     this.diagnostics.push(diagnostic(code, message, span, suggestion));
     // Depois de um erro o tipo vira `UNKNOWN`, e não `null`: `UNKNOWN` suprime as
@@ -119,15 +122,10 @@ class Typechecker {
   private typeOfStatePath(node: PathNode): ExprType {
     const first = node.steps[0];
     if (first === undefined) {
-      return this.report(
-        'AGX-E310',
-        '`state` sozinho não é um valor.',
-        node.span,
-        'Nomeie um canal: `state.<canal>`.',
-      );
+      return this.report('AGX-E310', msg0('state-alone'), node.span, msg0('state-alone-hint'));
     }
     if (first.kind !== 'field') {
-      return this.report('AGX-E310', 'Canais são nomeados, não indexados.', first.span);
+      return this.report('AGX-E310', msg0('channels-are-named'), first.span);
     }
 
     const decl = this.schema.channels[first.name];
@@ -136,11 +134,13 @@ class Typechecker {
       const closest = closestName(first.name, names);
       return this.report(
         'AGX-E310',
-        `Canal desconhecido: \`${first.name}\`.`,
+        msg('unknown-channel', { name: first.name }),
         first.span,
         closest === undefined
-          ? `Canais declarados: ${names.length > 0 ? names.join(', ') : '(nenhum)'}.`
-          : `Você quis dizer \`state.${closest}\`?`,
+          ? names.length > 0
+            ? msg('declared-channels', { names: names.join(', ') })
+            : msg0('no-channels-declared')
+          : msg('did-you-mean-channel', { name: closest }),
       );
     }
 
@@ -156,9 +156,9 @@ class Typechecker {
     if (first?.kind !== 'field') {
       return this.report(
         'AGX-E310',
-        '`run` expõe campos nomeados.',
+        msg0('run-exposes-fields'),
         node.span,
-        `Campos: ${Object.keys(RUN_FIELDS).join(', ')}.`,
+        msg('run-fields', { names: Object.keys(RUN_FIELDS).join(', ') }),
       );
     }
 
@@ -167,11 +167,11 @@ class Typechecker {
       const closest = closestName(first.name, Object.keys(RUN_FIELDS));
       return this.report(
         'AGX-E310',
-        `\`run\` não tem o campo \`${first.name}\`.`,
+        msg('unknown-run-field', { name: first.name }),
         first.span,
         closest === undefined
-          ? `Campos: ${Object.keys(RUN_FIELDS).join(', ')}.`
-          : `Você quis dizer \`run.${closest}\`?`,
+          ? msg('run-fields', { names: Object.keys(RUN_FIELDS).join(', ') })
+          : msg('did-you-mean-run-field', { name: closest }),
       );
     }
     return node.steps.length > 1 ? unknownType() : type;
@@ -189,11 +189,13 @@ class Typechecker {
     const closest = closestName(path, names);
     return this.report(
       'AGX-E310',
-      `Entrada desconhecida: \`in.${path}\`.`,
+      msg('unknown-input', { path }),
       node.span,
       closest === undefined
-        ? `Entradas mapeadas: ${names.length > 0 ? names.join(', ') : '(nenhuma)'}.`
-        : `Você quis dizer \`in.${closest}\`?`,
+        ? names.length > 0
+          ? msg('mapped-inputs', { names: names.join(', ') })
+          : msg0('no-inputs-mapped')
+        : msg('did-you-mean-input', { name: closest }),
     );
   }
 
@@ -205,18 +207,22 @@ class Typechecker {
       const closest = closestName(node.name, STDLIB_NAMES);
       return this.report(
         'AGX-E311',
-        `Função desconhecida: \`${node.name}\`.`,
+        msg('unknown-function', { name: node.name }),
         node.nameSpan,
         closest === undefined
-          ? `A biblioteca padrão é fechada: ${STDLIB_NAMES.join(', ')}.`
-          : `Você quis dizer \`${closest}\`?`,
+          ? msg('stdlib-is-closed', { names: STDLIB_NAMES.join(', ') })
+          : msg('did-you-mean-function', { name: closest }),
       );
     }
 
     if (node.args.length !== spec.params.length) {
       return this.report(
         'AGX-E312',
-        `\`${node.name}\` espera ${String(spec.params.length)} argumento(s) e recebeu ${String(node.args.length)}.`,
+        msg('wrong-arity', {
+          name: node.name,
+          expected: spec.params.length,
+          received: node.args.length,
+        }),
         node.span,
       );
     }
@@ -244,7 +250,7 @@ class Typechecker {
     argType: ExprType,
     argNode: ExprNode,
   ): void {
-    const position = `argumento ${String(index + 1)} de \`${functionName}\``;
+    const position = index + 1;
 
     if (param.literalOnly === true) {
       // `matches(s, state.pattern)` é recusado aqui, e não no interpretador: com padrão
@@ -252,9 +258,9 @@ class Typechecker {
       if (argNode.kind !== 'literal' || typeof argNode.value !== 'string') {
         this.report(
           'AGX-E330',
-          `O ${position} deve ser um literal de string.`,
+          msg('arg-must-be-literal', { index: position, fn: functionName }),
           argNode.span,
-          'O padrão é compilado e validado ao salvar o grafo, então não pode vir do estado.',
+          msg0('pattern-must-be-literal-hint'),
         );
         return;
       }
@@ -270,9 +276,13 @@ class Typechecker {
     if (param.nullability === 'reject' && (argType.nullable || isNullType(argType))) {
       this.report(
         'AGX-E322',
-        `O ${position} pode ser nulo (${formatType(argType)}).`,
+        msg('arg-may-be-null', {
+          index: position,
+          fn: functionName,
+          type: formatType(argType),
+        }),
         argNode.span,
-        'Use `coalesce(valor, padrão)` para declarar o que o ausente significa.',
+        msg0('use-coalesce-hint'),
       );
       return;
     }
@@ -282,7 +292,12 @@ class Typechecker {
     if (!param.accepts.includes(argType.base as never)) {
       this.report(
         'AGX-E320',
-        `O ${position} é ${formatType(argType)}, e a função aceita ${param.accepts.join(' ou ')}.`,
+        msg('arg-type-mismatch', {
+          index: position,
+          fn: functionName,
+          type: formatType(argType),
+          accepts: param.accepts.join(' or '),
+        }),
         argNode.span,
       );
     }
@@ -302,7 +317,11 @@ class Typechecker {
     if (operand.base !== expected) {
       this.report(
         'AGX-E320',
-        `\`${node.operator}\` espera ${expected} e recebeu ${formatType(operand)}.`,
+        msg('unary-operand-type', {
+          operator: node.operator,
+          expected,
+          received: formatType(operand),
+        }),
         node.span,
       );
     }
@@ -353,9 +372,9 @@ class Typechecker {
     if (type.base !== 'bool') {
       this.report(
         'AGX-E320',
-        `\`${operator}\` espera bool e recebeu ${formatType(type)}.`,
+        msg('logical-operand-not-bool', { operator, received: formatType(type) }),
         span,
-        'AGX-Expr não converte valor em booleano implicitamente. Compare explicitamente.',
+        msg0('no-boolean-coercion-hint'),
       );
     }
   }
@@ -373,9 +392,13 @@ class Typechecker {
     if (!sameBase(left, right)) {
       this.report(
         'AGX-E321',
-        `\`${node.operator}\` entre ${formatType(left)} e ${formatType(right)} nunca pode ser verdadeiro.`,
+        msg('equality-type-mismatch', {
+          operator: node.operator,
+          left: formatType(left),
+          right: formatType(right),
+        }),
         node.operatorSpan,
-        'AGX-Expr não converte tipos. Converta explicitamente com `int()`, `float()` ou `bool()`.',
+        msg0('no-type-conversion-hint'),
       );
     }
   }
@@ -399,9 +422,9 @@ class Typechecker {
       if (!isOrderable(type)) {
         this.report(
           'AGX-E321',
-          `\`${node.operator}\` não se aplica a ${formatType(type)}.`,
+          msg('not-orderable', { operator: node.operator, type: formatType(type) }),
           span,
-          'Só number e string são ordenáveis.',
+          msg0('only-number-string-orderable-hint'),
         );
         return;
       }
@@ -410,9 +433,13 @@ class Typechecker {
     if (!sameBase(left, right)) {
       this.report(
         'AGX-E321',
-        `\`${node.operator}\` entre ${formatType(left)} e ${formatType(right)}.`,
+        msg('ordering-type-mismatch', {
+          operator: node.operator,
+          left: formatType(left),
+          right: formatType(right),
+        }),
         node.operatorSpan,
-        'Ordene valores do mesmo tipo.',
+        msg0('order-same-type-hint'),
       );
     }
   }
@@ -434,9 +461,9 @@ class Typechecker {
       // engano só, e a primeira aponta para o lugar errado.
       this.report(
         'AGX-E321',
-        '`in` não faz busca de substring.',
+        msg0('in-not-substring'),
         node.operatorSpan,
-        'Use `contains(texto, trecho)`.',
+        msg0('use-contains-hint'),
       );
       return;
     }
@@ -446,7 +473,7 @@ class Typechecker {
     if (right.base !== 'array' && right.base !== 'object') {
       this.report(
         'AGX-E321',
-        `\`in\` espera array ou object à direita, e recebeu ${formatType(right)}.`,
+        msg('in-needs-collection', { type: formatType(right) }),
         node.operatorSpan,
       );
       return;
@@ -455,7 +482,7 @@ class Typechecker {
     if (right.base === 'object' && !isUnknown(left) && left.base !== 'string') {
       this.report(
         'AGX-E321',
-        `Chave de object é string, e a comparação recebeu ${formatType(left)}.`,
+        msg('object-key-must-be-string', { type: formatType(left) }),
         node.operatorSpan,
       );
     }
@@ -483,11 +510,12 @@ class Typechecker {
       if (type.base !== 'number') {
         this.report(
           'AGX-E320',
-          `\`${node.operator}\` espera number e recebeu ${formatType(type)}.`,
+          msg('arith-operand-not-number', {
+            operator: node.operator,
+            received: formatType(type),
+          }),
           span,
-          node.operator === '+'
-            ? 'Para concatenar, os dois lados devem ser string. Converta com `int()` ou `float()`.'
-            : undefined,
+          node.operator === '+' ? msg0('concat-needs-strings-hint') : undefined,
         );
         return NUMBER;
       }
@@ -502,9 +530,9 @@ class Typechecker {
 
     this.report(
       'AGX-E322',
-      `${what} recebeu um valor que pode ser nulo (${formatType(type)}).`,
+      msg('operand-may-be-null', { operator: what, type: formatType(type) }),
       span,
-      'Use `coalesce(valor, padrão)` para declarar o que o ausente significa.',
+      msg0('use-coalesce-hint'),
     );
     return true;
   }

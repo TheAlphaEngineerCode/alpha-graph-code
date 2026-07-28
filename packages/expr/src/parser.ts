@@ -6,7 +6,16 @@ import type {
   PathStep,
   UnaryOperator,
 } from './ast.js';
-import { diagnostic, err, ok, type Diagnostic, type Result, type Span } from './diagnostics.js';
+import {
+  diagnostic,
+  err,
+  msg,
+  msg0,
+  ok,
+  type Diagnostic,
+  type Result,
+  type Span,
+} from './diagnostics.js';
 import { tokenize, type Token, type TokenKind } from './lexer.js';
 
 const PATH_ROOTS: readonly string[] = ['state', 'in', 'run'];
@@ -57,9 +66,9 @@ class Parser {
     if (this.depth <= MAX_DEPTH) return undefined;
     return diagnostic(
       'AGX-E302',
-      `Expressão aninhada além do limite de ${String(MAX_DEPTH)} níveis.`,
+      msg('nesting-too-deep', { limit: MAX_DEPTH }),
       span,
-      'Aninhamento assim profundo quase sempre é entrada malformada. Se for intencional, quebre a condição em nós `condition` encadeados.',
+      msg0('nesting-too-deep-hint'),
     );
   }
 
@@ -107,13 +116,7 @@ class Parser {
     if (!expr.ok) return expr;
 
     if (this.token().kind !== 'eof') {
-      return err(
-        diagnostic(
-          'AGX-E302',
-          `Token inesperado após o fim da expressão: ${describeToken(this.token())}.`,
-          this.token().span,
-        ),
-      );
+      return err(diagnostic('AGX-E302', describeUnexpected(this.token()), this.token().span));
     }
     return expr;
   }
@@ -148,9 +151,9 @@ class Parser {
       return err(
         diagnostic(
           'AGX-E302',
-          'Comparação encadeada não é permitida.',
+          msg0('chained-comparison'),
           this.token().span,
-          'Escreva as duas comparações ligadas por `&&`: `a < b && b < c`.',
+          msg0('use-and-for-chained-comparison'),
         ),
       );
     }
@@ -230,9 +233,7 @@ class Parser {
         const inner = this.parseOr();
         if (!inner.ok) return inner;
         if (this.token().kind !== 'rparen') {
-          return err(
-            diagnostic('AGX-E302', 'Falta `)` para fechar o parêntese.', this.token().span),
-          );
+          return err(diagnostic('AGX-E302', msg0('missing-close-paren'), this.token().span));
         }
         const close = this.advance();
         return ok({
@@ -254,24 +255,11 @@ class Parser {
           this.advance();
           return this.parsePathSteps(token);
         }
-        return err(
-          diagnostic(
-            'AGX-E302',
-            '`in` sozinho não é um valor.',
-            token.span,
-            'Como raiz, `in` nomeia uma entrada do nó: `in.<nome>`. Como operador, vai entre dois valores: `x in state.lista`.',
-          ),
-        );
+        return err(diagnostic('AGX-E302', msg0('in-alone'), token.span, msg0('in-usage-hint')));
       }
 
       default:
-        return err(
-          diagnostic(
-            'AGX-E302',
-            `Esperava um valor, caminho ou chamada, e encontrei ${describeToken(token)}.`,
-            token.span,
-          ),
-        );
+        return err(diagnostic('AGX-E302', describeExpectedValue(token), token.span));
     }
   }
 
@@ -286,9 +274,9 @@ class Parser {
     return err(
       diagnostic(
         'AGX-E302',
-        `Nome solto: \`${token.text}\`.`,
+        msg('bare-name', { name: token.text }),
         token.span,
-        `Caminhos começam por uma raiz. Você quis dizer \`state.${token.text}\`?`,
+        msg('bare-name-hint', { name: token.text }),
       ),
     );
   }
@@ -315,7 +303,7 @@ class Parser {
       return err(
         diagnostic(
           'AGX-E302',
-          `Falta \`)\` para fechar a chamada de \`${nameToken.text}\`.`,
+          msg('missing-close-paren-call', { name: nameToken.text }),
           this.token().span,
         ),
       );
@@ -342,7 +330,7 @@ class Parser {
         // Palavras reservadas são identificadores válidos depois do ponto: um canal
         // pode se chamar `in`. É `state.in` que não faz sentido, não `.in`.
         if (field.kind !== 'ident' && field.kind !== 'in') {
-          return err(diagnostic('AGX-E302', 'Esperava um nome de campo após `.`.', field.span));
+          return err(diagnostic('AGX-E302', msg0('expected-field-name'), field.span));
         }
         this.advance();
         steps.push({ kind: 'field', name: field.text, span: field.span });
@@ -357,16 +345,18 @@ class Parser {
           return err(
             diagnostic(
               'AGX-E302',
-              'Índice deve ser um inteiro literal.',
+              msg0('index-must-be-literal'),
               indexToken.span,
-              'Índice calculado não existe em AGX-Expr: o caminho precisa ser analisável sem executar nada.',
+              msg0('index-must-be-literal-hint'),
             ),
           );
         }
         this.advance();
 
         if (this.token().kind !== 'rbracket') {
-          return err(diagnostic('AGX-E302', 'Falta `]` para fechar o índice.', this.token().span));
+          return err(
+            diagnostic('AGX-E302', msg0('missing-close-bracket-index'), this.token().span),
+          );
         }
         const close = this.advance();
         steps.push({ kind: 'index', index: Number(indexToken.value), span: indexToken.span });
@@ -402,9 +392,18 @@ function binary(
   };
 }
 
-function describeToken(token: Token): string {
-  if (token.kind === 'eof') return 'o fim da expressão';
-  return `\`${token.text}\``;
+// Duas mensagens em vez de um fragmento localizado dentro de outra: fragmento aninhado
+// é como catálogo de i18n deixa de ser traduzível sem reescrever a frase toda.
+function describeUnexpected(token: Token) {
+  return token.kind === 'eof'
+    ? msg0('unexpected-eof-after-end')
+    : msg('unexpected-token-after-end', { token: token.text });
+}
+
+function describeExpectedValue(token: Token) {
+  return token.kind === 'eof'
+    ? msg0('expected-value-found-eof')
+    : msg('expected-value-found-token', { token: token.text });
 }
 
 /** Analisa uma expressão. Nunca lança: erro de sintaxe é valor de retorno. */

@@ -301,7 +301,10 @@ describe('propriedade: onde o schema enxerga, o typecheck é suficiente', () => 
         if (result.ok) return;
 
         expect(result.error.code).toMatch(/^AGX-R31[01]$/);
-        expect(result.error.message, source).not.toContain('espera number e recebeu');
+        // Erro **aritmético** é esperado aqui; erro de **tipo** significaria buraco no
+        // typechecker, e é o que estas duas IDs representam.
+        expect(result.error.message.id, source).not.toBe('runtime-arith-operands');
+        expect(result.error.message.id, source).not.toBe('runtime-comparison-mismatch');
       }),
       { numRuns: RUNS * 2 },
     );

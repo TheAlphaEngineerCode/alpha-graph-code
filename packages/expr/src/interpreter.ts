@@ -10,16 +10,16 @@
  * o que transforma isso em erro em vez de espera.
  */
 import { formatPath, type CallNode, type ExprNode, type PathNode } from './ast.js';
-import type { DiagnosticCode, Span } from './diagnostics.js';
+import { msg, msg0, type DiagnosticCode, type MessageRef, type Span } from './diagnostics.js';
 import { testPattern, type CompiledPattern } from './regex.js';
 import { STDLIB, type CallContext } from './stdlib.js';
 import { isArray, isObject, kindOf, valuesEqual, type ExprValue } from './value.js';
 
 export interface EvaluationError {
   readonly code: Extract<DiagnosticCode, 'AGX-R310' | 'AGX-R311'>;
-  readonly message: string;
+  readonly message: MessageRef;
   readonly span: Span;
-  readonly suggestion?: string;
+  readonly suggestion?: MessageRef;
 }
 
 export type EvalResult =
@@ -79,9 +79,9 @@ class Interpreter {
 
   private fail(
     code: EvaluationError['code'],
-    message: string,
+    message: MessageRef,
     span: Span,
-    suggestion?: string,
+    suggestion?: MessageRef,
   ): ExprValue {
     // O primeiro erro vence. Sobrescrever faria a mensagem final apontar para uma falha
     // derivada, e quem lê o trace procuraria no lugar errado.
@@ -95,9 +95,9 @@ class Interpreter {
     if (this.fuel < 0) {
       this.fail(
         'AGX-R310',
-        `Limite de ${String(this.limit)} passos de avaliação excedido.`,
+        msg('fuel-exhausted', { limit: this.limit }),
         span,
-        'A expressão é grande demais, ou o dado de entrada é maior que o previsto.',
+        msg0('fuel-exhausted-hint'),
       );
       return false;
     }
@@ -203,7 +203,7 @@ class Interpreter {
     if (spec === undefined) {
       // Inalcançável depois do typecheck. Devolver erro em vez de lançar mantém a
       // promessa de que este módulo não tem caminho de exceção.
-      return this.fail('AGX-R311', `Função desconhecida em runtime: \`${node.name}\`.`, node.span);
+      return this.fail('AGX-R311', msg('unknown-function-runtime', { name: node.name }), node.span);
     }
 
     const args = node.args.map((argNode) => this.evaluate(argNode));
@@ -240,13 +240,21 @@ class Interpreter {
       // verdade: valor vindo de `state.documents[0]` tem tipo desconhecido, então o
       // typechecker não pode barrá-lo (specs/agx-expr.md §5.5).
       if (typeof value !== 'boolean') {
-        return this.fail('AGX-R311', `\`!\` espera bool e recebeu ${kindOf(value)}.`, node.span);
+        return this.fail(
+          'AGX-R311',
+          msg('logical-operand-not-bool', { operator: '!', received: kindOf(value) }),
+          node.span,
+        );
       }
       return !value;
     }
 
     if (typeof value !== 'number') {
-      return this.fail('AGX-R311', `\`-\` espera number e recebeu ${kindOf(value)}.`, node.span);
+      return this.fail(
+        'AGX-R311',
+        msg('arith-operand-not-number', { operator: '-', received: kindOf(value) }),
+        node.span,
+      );
     }
     return -value;
   }
@@ -302,9 +310,9 @@ class Interpreter {
   private failNotBool(operator: string, value: ExprValue, span: Span): ExprValue {
     return this.fail(
       'AGX-R311',
-      `\`${operator}\` espera bool e recebeu ${kindOf(value)}.`,
+      msg('logical-operand-not-bool', { operator, received: kindOf(value) }),
       span,
-      'AGX-Expr não converte valor em booleano. Compare explicitamente.',
+      msg0('no-boolean-coercion-hint'),
     );
   }
 
@@ -316,7 +324,11 @@ class Interpreter {
     if (!comparable) {
       return this.fail(
         'AGX-R311',
-        `Comparação \`${operator}\` entre ${kindOf(left)} e ${kindOf(right)}.`,
+        msg('runtime-comparison-mismatch', {
+          operator,
+          left: kindOf(left),
+          right: kindOf(right),
+        }),
         span,
       );
     }
@@ -349,7 +361,11 @@ class Interpreter {
     if (typeof left !== 'number' || typeof right !== 'number') {
       return this.fail(
         'AGX-R311',
-        `\`${operator}\` espera number e recebeu ${kindOf(left)} e ${kindOf(right)}.`,
+        msg('runtime-arith-operands', {
+          operator,
+          left: kindOf(left),
+          right: kindOf(right),
+        }),
         span,
       );
     }
@@ -357,9 +373,9 @@ class Interpreter {
     if ((operator === '/' || operator === '%') && right === 0) {
       return this.fail(
         'AGX-R311',
-        operator === '/' ? 'Divisão por zero.' : 'Resto de divisão por zero.',
+        operator === '/' ? msg0('division-by-zero') : msg0('remainder-by-zero'),
         span,
-        'Garanta o divisor numa branch anterior: `state.calls > 0`.',
+        msg0('guard-divisor-hint'),
       );
     }
 
@@ -369,9 +385,9 @@ class Interpreter {
     if (!Number.isFinite(result)) {
       return this.fail(
         'AGX-R311',
-        `\`${operator}\` produziu um valor fora da faixa representável.`,
+        msg('arith-out-of-range', { operator }),
         span,
-        'AGX-Expr não tem Infinity: o resultado precisa ser um número finito.',
+        msg0('no-infinity-finite-hint'),
       );
     }
     return result;

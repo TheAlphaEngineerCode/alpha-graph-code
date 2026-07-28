@@ -8,14 +8,22 @@
 import { describe, expect, it } from 'vitest';
 import { walk, type ExprNode } from './ast.js';
 import { codePointLength } from './codepoints.js';
-import { closestName, editDistance, formatDiagnostic, diagnostic } from './diagnostics.js';
+import {
+  closestName,
+  diagnostic,
+  editDistance,
+  formatDiagnostic,
+  msg,
+  msg0,
+} from './diagnostics.js';
+import { LOCALES } from './messages/index.js';
 import { parse } from './parser.js';
 import { formatType, nonNull, nullable, type ExprType } from './types.js';
 import { formatValue, kindOf, valuesEqual } from './value.js';
 
 function ast(source: string): ExprNode {
   const result = parse(source);
-  if (!result.ok) throw new Error(result.diagnostics[0]?.message ?? 'parse falhou');
+  if (!result.ok) throw new Error(result.diagnostics[0]?.message.id ?? 'parse falhou');
   return result.value;
 }
 
@@ -75,7 +83,7 @@ describe('limite de profundidade do parser', () => {
       expect(result.ok, `profundidade ${String(depth)}`).toBe(false);
       if (result.ok) continue;
       expect(result.diagnostics[0]?.code).toBe('AGX-E302');
-      expect(result.diagnostics[0]?.message).toContain('aninhada');
+      expect(result.diagnostics[0]?.message.id).toBe('nesting-too-deep');
     }
   });
 
@@ -94,16 +102,16 @@ describe('limite de profundidade do parser', () => {
 describe('formatDiagnostic — o que o CLI imprime', () => {
   const d = diagnostic(
     'AGX-E310',
-    'Canal desconhecido: `confidenc`.',
+    msg('unknown-channel', { name: 'confidenc' }),
     { start: 6, end: 16 },
-    'Você quis dizer `state.confidence`?',
+    msg('did-you-mean-channel', { name: 'confidence' }),
   );
 
   it('mostra o trecho da expressão quando a fonte é conhecida', () => {
-    const text = formatDiagnostic(d, 'state.confidenc >= 0.8');
+    const text = formatDiagnostic(d, { source: 'state.confidenc >= 0.8' });
     expect(text).toContain('AGX-E310');
     expect(text).toContain('confidenc');
-    expect(text).toContain('→ Você quis dizer');
+    expect(text).toContain('→ Did you mean');
   });
 
   it('cai para a posição quando não há fonte', () => {
@@ -111,13 +119,33 @@ describe('formatDiagnostic — o que o CLI imprime', () => {
   });
 
   it('mostra coluna quando o span é vazio', () => {
-    const vazio = diagnostic('AGX-E302', 'Falta `)`.', { start: 5, end: 5 });
-    expect(formatDiagnostic(vazio, 'len(x')).toContain('coluna 6');
+    const vazio = diagnostic('AGX-E302', msg0('missing-close-paren'), { start: 5, end: 5 });
+    expect(formatDiagnostic(vazio, { source: 'len(x' })).toContain('column 6');
   });
 
   it('omite a seta quando não há sugestão', () => {
-    const sem = diagnostic('AGX-E302', 'Sintaxe inválida.', { start: 0, end: 1 });
-    expect(formatDiagnostic(sem, 'x')).not.toContain('→');
+    const sem = diagnostic('AGX-E302', msg0('chained-comparison'), { start: 0, end: 1 });
+    expect(formatDiagnostic(sem, { source: 'x' })).not.toContain('→');
+  });
+
+  it('renderiza no locale pedido, mensagem e sugestão juntas', () => {
+    // O locale é do chamador, não do ambiente (ADR-0006 §4) — e vale para o diagnóstico
+    // inteiro, não só para a mensagem principal: sugestão em outro idioma seria pior que
+    // não traduzir.
+    const pt = formatDiagnostic(d, { source: 'state.confidenc >= 0.8', locale: 'pt-BR' });
+    expect(pt).toContain('Canal desconhecido');
+    expect(pt).toContain('→ Você quis dizer');
+
+    const es = formatDiagnostic(d, { locale: 'es' });
+    expect(es).toContain('Canal desconocido');
+    expect(es).toContain('¿Quiso decir');
+  });
+
+  it('o código do diagnóstico não muda com o locale', () => {
+    // É o que um consumidor de máquina casa, e é o que entra no trace.
+    for (const locale of LOCALES) {
+      expect(formatDiagnostic(d, { locale })).toContain('AGX-E310');
+    }
   });
 });
 

@@ -1,11 +1,23 @@
-import { sliceCodePoints } from './codepoints.js';
 /**
  * Diagnósticos de AGX-Expr.
  *
  * Códigos `E3xx` são de validação: acontecem ao salvar o grafo, com valores ainda
  * desconhecidos. Códigos `R31x` são de avaliação e só aparecem com os valores em mãos.
  * Cada código tem página em `docs/diagnostics/`.
+ *
+ * Um diagnóstico **não carrega texto** — carrega `messageId` e parâmetros tipados, e o
+ * texto sai de `render` no momento de exibir (ADR-0006). Isso mantém o trace independente
+ * de locale, que é requisito de `specs/trace-v1.md`, e permite a um consumidor de máquina
+ * casar o identificador em vez de uma frase que pode ser reescrita.
  */
+import { sliceCodePoints } from './codepoints.js';
+import {
+  DEFAULT_LOCALE,
+  message,
+  type Locale,
+  type MessageId,
+  type MessageParams,
+} from './messages/index.js';
 
 export const DIAGNOSTIC_CODES = [
   'AGX-E301',
@@ -29,24 +41,66 @@ export interface Span {
   readonly end: number;
 }
 
+/**
+ * Uma mensagem por resolver: identificador + parâmetros.
+ *
+ * O par vem junto de propósito. Separá-los em dois campos soltos permitiria um ID com os
+ * parâmetros de outro, e o erro só apareceria na renderização — em produção, no texto.
+ */
+export type MessageRef = {
+  [K in MessageId]: { readonly id: K; readonly params: MessageParams[K] };
+}[MessageId];
+
 export interface Diagnostic {
   readonly code: DiagnosticCode;
-  readonly message: string;
+  readonly message: MessageRef;
   readonly span: Span;
   /**
    * Correção proposta. Presente sempre que dá para apontar uma: nome de canal mais
    * próximo, função equivalente, ou a forma que o autor provavelmente quis escrever.
    */
-  readonly suggestion?: string;
+  readonly suggestion?: MessageRef;
 }
 
 export function diagnostic(
   code: DiagnosticCode,
-  message: string,
+  message: MessageRef,
   span: Span,
-  suggestion?: string,
+  suggestion?: MessageRef,
 ): Diagnostic {
   return suggestion === undefined ? { code, message, span } : { code, message, span, suggestion };
+}
+
+/**
+ * Atalho para montar um `MessageRef` com os parâmetros checados contra o ID.
+ *
+ * `msg('unknown-channel', { name })` não compila se `unknown-channel` não declarar `name`.
+ */
+export function msg<K extends MessageId>(id: K, params: MessageParams[K]): MessageRef {
+  return { id, params } as MessageRef;
+}
+
+/** Sem parâmetros — a maioria das mensagens de sugestão. */
+export function msg0(id: NoParamMessageId): MessageRef {
+  return { id, params: {} } as MessageRef;
+}
+
+/**
+ * IDs cujo catálogo não recebe parâmetro algum.
+ *
+ * O teste é sobre as **chaves** do tipo de parâmetros. A primeira versão perguntava
+ * `Record<string, never> extends MessageParams[K]`, e isso é verdadeiro para
+ * `{ name: string }` — a index signature satisfaz qualquer propriedade, porque `never` é
+ * atribuível a tudo. Resultado: `msg0` aceitava ID com parâmetro e a mensagem saía com
+ * `undefined` no meio.
+ */
+export type NoParamMessageId = {
+  [K in MessageId]: keyof MessageParams[K] extends never ? K : never;
+}[MessageId];
+
+/** Texto de um `MessageRef` no locale pedido. */
+export function renderMessage(ref: MessageRef, locale: Locale = DEFAULT_LOCALE): string {
+  return message(ref.id, ref.params, locale);
 }
 
 /**
@@ -68,16 +122,29 @@ export function err<T>(...diagnostics: readonly Diagnostic[]): Result<T> {
   return { ok: false, diagnostics };
 }
 
-/** Renderiza um diagnóstico numa linha, no formato usado pelo CLI. */
-export function formatDiagnostic(d: Diagnostic, source?: string): string {
-  const where = source === undefined ? String(d.span.start) : describePosition(source, d.span);
-  const base = `${d.code} ${where}: ${d.message}`;
-  return d.suggestion === undefined ? base : `${base}\n  → ${d.suggestion}`;
+export interface FormatOptions {
+  /** Trecho original, para o diagnóstico citar o texto em vez da posição. */
+  readonly source?: string;
+  readonly locale?: Locale;
 }
 
-function describePosition(source: string, span: Span): string {
+/** Renderiza um diagnóstico no formato usado pelo CLI. */
+export function formatDiagnostic(d: Diagnostic, options: FormatOptions = {}): string {
+  const locale = options.locale ?? DEFAULT_LOCALE;
+  const where =
+    options.source === undefined
+      ? String(d.span.start)
+      : describePosition(options.source, d.span, locale);
+
+  const base = `${d.code} ${where}: ${renderMessage(d.message, locale)}`;
+  if (d.suggestion === undefined) return base;
+  return `${base}\n  → ${renderMessage(d.suggestion, locale)}`;
+}
+
+function describePosition(source: string, span: Span, locale: Locale): string {
   const excerpt = sliceCodePoints(source, span.start, span.end);
-  return excerpt.length > 0 ? `'${excerpt}'` : `coluna ${String(span.start + 1)}`;
+  if (excerpt.length > 0) return `'${excerpt}'`;
+  return message('position-column', { column: span.start + 1 }, locale);
 }
 
 /**

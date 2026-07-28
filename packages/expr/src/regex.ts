@@ -13,7 +13,16 @@
  * Não há captura: `matches` devolve `bool`, e grupo serve só para agrupar.
  */
 import { toCodePoints } from './codepoints.js';
-import { diagnostic, err, ok, type Result, type Span } from './diagnostics.js';
+import {
+  diagnostic,
+  err,
+  msg,
+  msg0,
+  ok,
+  type MessageRef,
+  type Result,
+  type Span,
+} from './diagnostics.js';
 
 /** Teto de repetição em `{n,m}`. Sem ele, o ataque migra da busca para a compilação. */
 const MAX_REPEAT = 1000;
@@ -90,7 +99,7 @@ class PatternParser {
     return c;
   }
 
-  private fail<T>(message: string, suggestion?: string): Result<T> {
+  private fail<T>(message: MessageRef, suggestion?: MessageRef): Result<T> {
     return err(diagnostic('AGX-E330', message, this.span, suggestion));
   }
 
@@ -98,7 +107,7 @@ class PatternParser {
     const node = this.parseAlternation();
     if (!node.ok) return node;
     if (this.index < this.chars.length) {
-      return this.fail(`Caractere inesperado no padrão: ${JSON.stringify(this.peek())}.`);
+      return this.fail(msg('regex-unexpected-character', { char: JSON.stringify(this.peek()) }));
     }
     return node;
   }
@@ -166,17 +175,11 @@ class PatternParser {
     // Um quantificador preguiçoso muda qual casamento vence, e sem captura não há
     // "qual casamento" observável — aceitá-lo seria fingir uma semântica inexistente.
     if (this.peek() === '?') {
-      return this.fail(
-        'Quantificador preguiçoso (`*?`, `+?`, `??`) não existe neste dialeto.',
-        'Sem captura, o casamento preguiçoso não muda o resultado de `matches`. Remova o `?`.',
-      );
+      return this.fail(msg0('regex-no-lazy-quantifier'), msg0('regex-no-lazy-quantifier-hint'));
     }
     // `a**` é ambíguo e, num motor com backtracking, é fonte clássica de explosão.
     if (this.peek() === '*' || this.peek() === '+') {
-      return this.fail(
-        'Quantificador aplicado a quantificador.',
-        'Agrupe explicitamente: `(a+)+`.',
-      );
+      return this.fail(msg0('regex-nested-quantifier'), msg0('regex-nested-quantifier-hint'));
     }
 
     return ok({ kind: 'repeat', node, min, max });
@@ -209,14 +212,12 @@ class PatternParser {
     const max = maxDigits === '' ? UNBOUNDED : Number(maxDigits);
 
     if (max !== UNBOUNDED && max < min) {
-      return this.fail(
-        `Repetição inválida: {${minDigits},${maxDigits}} tem máximo menor que o mínimo.`,
-      );
+      return this.fail(msg('regex-inverted-repetition', { min: minDigits, max: maxDigits }));
     }
     if (min > MAX_REPEAT || (max !== UNBOUNDED && max > MAX_REPEAT)) {
       return this.fail(
-        `Repetição acima do teto de ${String(MAX_REPEAT)}.`,
-        'Sem teto, o padrão gera um autômato gigante e o custo migra da busca para a compilação.',
+        msg('regex-repetition-above-cap', { cap: MAX_REPEAT }),
+        msg0('regex-repetition-cap-hint'),
       );
     }
     return ok({ min, max });
@@ -251,13 +252,13 @@ class PatternParser {
       case '\\':
         return this.parseEscape();
       case ')':
-        return this.fail('`)` sem `(` correspondente.');
+        return this.fail(msg0('regex-unmatched-close-paren'));
       case ']':
-        return this.fail('`]` sem `[` correspondente.');
+        return this.fail(msg0('regex-unmatched-close-bracket'));
       case '*':
       case '+':
       case '?':
-        return this.fail(`Quantificador \`${c}\` sem nada para repetir.`);
+        return this.fail(msg('regex-quantifier-nothing-to-repeat', { quantifier: c }));
       default:
         return ok({ kind: 'char', matcher: { kind: 'literal', char: c } });
     }
@@ -267,13 +268,10 @@ class PatternParser {
     if (this.peek() === '?') {
       const marker = this.peek(1);
       if (marker === '=' || marker === '!') {
-        return this.fail(
-          'Lookahead não existe neste dialeto.',
-          'Reescreva sem lookahead, ou faça a checagem numa branch `condition` separada.',
-        );
+        return this.fail(msg0('regex-no-lookahead'), msg0('regex-no-lookahead-hint'));
       }
       if (marker === '<') {
-        return this.fail('Lookbehind e grupo nomeado não existem neste dialeto.');
+        return this.fail(msg0('regex-no-lookbehind'));
       }
       if (marker === ':') {
         // Todo grupo já é sem captura; aceitar a forma explícita evita recusar um
@@ -281,27 +279,24 @@ class PatternParser {
         this.next();
         this.next();
       } else {
-        return this.fail(`Construção \`(?${marker ?? ''}\` não suportada.`);
+        return this.fail(msg('regex-unsupported-group', { marker: marker ?? '' }));
       }
     }
 
     const inner = this.parseAlternation();
     if (!inner.ok) return inner;
 
-    if (this.peek() !== ')') return this.fail('Falta `)` para fechar o grupo.');
+    if (this.peek() !== ')') return this.fail(msg0('regex-missing-close-paren'));
     this.next();
     return inner;
   }
 
   private parseEscape(): Result<RegexNode> {
     const c = this.next();
-    if (c === undefined) return this.fail('Escape incompleto no fim do padrão.');
+    if (c === undefined) return this.fail(msg0('regex-incomplete-escape'));
 
     if (c >= '1' && c <= '9') {
-      return this.fail(
-        'Backreference não existe neste dialeto.',
-        'Backreference é o que torna o casamento exponencial. `matches` não tem captura.',
-      );
+      return this.fail(msg0('regex-no-backreference'), msg0('regex-no-backreference-hint'));
     }
 
     const shorthand = shorthandOf(c);
@@ -334,7 +329,7 @@ class PatternParser {
       let low: string;
       if (c === '\\') {
         const escaped = this.next();
-        if (escaped === undefined) return this.fail('Escape incompleto dentro da classe.');
+        if (escaped === undefined) return this.fail(msg0('regex-incomplete-escape-in-class'));
         const shorthand = shorthandOf(escaped);
         if (shorthand !== undefined) {
           items.push(shorthand);
@@ -349,12 +344,12 @@ class PatternParser {
       if (this.peek() === '-' && this.peek(1) !== undefined && this.peek(1) !== ']') {
         this.next();
         const highRaw = this.next();
-        if (highRaw === undefined) return this.fail('Faixa incompleta na classe.');
+        if (highRaw === undefined) return this.fail(msg0('regex-incomplete-range'));
 
         let high = highRaw;
         if (highRaw === '\\') {
           const escaped = this.next();
-          if (escaped === undefined) return this.fail('Escape incompleto na faixa.');
+          if (escaped === undefined) return this.fail(msg0('regex-incomplete-escape-in-range'));
           // Escape que não é de controle vale como literal — `[a-\]]` é faixa válida.
           // Antes isto virava string vazia e caía em "faixa invertida", que aponta para
           // o problema errado.
@@ -362,7 +357,7 @@ class PatternParser {
         }
 
         if (high < low) {
-          return this.fail(`Faixa invertida na classe: \`${low}-${high}\`.`);
+          return this.fail(msg('regex-inverted-range', { low, high }));
         }
         items.push({ kind: 'range', from: low, to: high });
         continue;
@@ -371,8 +366,8 @@ class PatternParser {
       items.push({ kind: 'char', char: low });
     }
 
-    if (!closed) return this.fail('Falta `]` para fechar a classe de caracteres.');
-    if (items.length === 0) return this.fail('Classe de caracteres vazia.');
+    if (!closed) return this.fail(msg0('regex-missing-close-bracket'));
+    if (items.length === 0) return this.fail(msg0('regex-empty-class'));
 
     return ok({ kind: 'char', matcher: { kind: 'class', negated, items } });
   }

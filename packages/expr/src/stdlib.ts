@@ -9,12 +9,14 @@
  */
 import { codePointLength as codePointLengthOf } from './codepoints.js';
 import { ARRAY, BOOL, NUMBER, OBJECT, STRING, type BaseType, type ExprType } from './types.js';
+import type { MessageRef } from './diagnostics.js';
+import { msg, msg0 } from './diagnostics.js';
 import { isArray, kindOf, valuesEqual, type ExprValue } from './value.js';
 
 /** Erro de avaliação. Valor de retorno — a stdlib nunca lança (ADR-0004 §3). */
 export interface EvalFailure {
-  readonly message: string;
-  readonly suggestion?: string;
+  readonly message: MessageRef;
+  readonly suggestion?: MessageRef;
 }
 
 export type CallResult =
@@ -22,7 +24,7 @@ export type CallResult =
   | { readonly ok: false; readonly failure: EvalFailure };
 
 const good = (value: ExprValue): CallResult => ({ ok: true, value });
-const bad = (message: string, suggestion?: string): CallResult => ({
+const bad = (message: MessageRef, suggestion?: MessageRef): CallResult => ({
   ok: false,
   failure: suggestion === undefined ? { message } : { message, suggestion },
 });
@@ -62,7 +64,7 @@ export interface FunctionSpec {
    */
   readonly relate?: (
     args: readonly ExprType[],
-  ) => { message: string; suggestion?: string } | undefined;
+  ) => { message: MessageRef; suggestion?: MessageRef } | undefined;
   /** Custo em fuel, além do custo por nó. Proporcional ao trabalho real. */
   readonly fuelCost: (args: readonly ExprValue[]) => number;
   readonly call: (args: readonly ExprValue[], ctx: CallContext) => CallResult;
@@ -90,10 +92,7 @@ const codePointLength = codePointLengthOf;
 
 function finiteOrFail(value: number, what: string): CallResult {
   if (!Number.isFinite(value)) {
-    return bad(
-      `${what} produziu um valor não finito.`,
-      'AGX-Expr não tem NaN nem Infinity (ADR-0004).',
-    );
+    return bad(msg('fn-non-finite-result', { fn: what }), msg0('no-nan-no-infinity'));
   }
   return good(value);
 }
@@ -109,7 +108,7 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
       if (typeof value === 'string') return good(codePointLength(value));
       if (isArray(value)) return good(value.length);
       if (value !== null && typeof value === 'object') return good(Object.keys(value).length);
-      return bad(`len() não se aplica a ${kindOf(value)}.`);
+      return bad(msg('len-not-applicable', { kind: kindOf(value) }));
     },
   },
 
@@ -169,9 +168,8 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
       if (value.base === fallback.base) return undefined;
 
       return {
-        message: `coalesce() recebeu ${value.base} e um padrão ${fallback.base}.`,
-        suggestion:
-          'O padrão precisa ser do mesmo tipo do valor — é ele que o substitui quando o valor é nulo.',
+        message: msg('coalesce-type-mismatch', { value: value.base, fallback: fallback.base }),
+        suggestion: msg0('coalesce-type-mismatch-hint'),
       };
     },
     returns: (args) => args[1] ?? STRING,
@@ -214,14 +212,14 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
 
       if (typeof haystack === 'string') {
         if (typeof needle !== 'string') {
-          return bad(`contains() sobre string espera string, e recebeu ${kindOf(needle)}.`);
+          return bad(msg('contains-needs-string', { kind: kindOf(needle) }));
         }
         return good(haystack.includes(needle));
       }
       if (isArray(haystack)) {
         return good(haystack.some((item) => valuesEqual(item, needle)));
       }
-      return bad(`contains() não se aplica a ${kindOf(haystack)}.`);
+      return bad(msg('contains-not-applicable', { kind: kindOf(haystack) }));
     },
   },
 
@@ -233,7 +231,7 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
     call: (args) => {
       const converted = toNumber(arg(args, 0));
       if (converted === undefined)
-        return bad(`int() não converte ${formatForError(arg(args, 0))}.`);
+        return bad(msg('int-cannot-convert', { value: formatForError(arg(args, 0)) }));
       return finiteOrFail(Math.trunc(converted), 'int()');
     },
   },
@@ -246,7 +244,7 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
     call: (args) => {
       const converted = toNumber(arg(args, 0));
       if (converted === undefined) {
-        return bad(`float() não converte ${formatForError(arg(args, 0))}.`);
+        return bad(msg('float-cannot-convert', { value: formatForError(arg(args, 0)) }));
       }
       return finiteOrFail(converted, 'float()');
     },
@@ -267,11 +265,11 @@ export const STDLIB: Readonly<Record<string, FunctionSpec>> = {
         // Sem conversão por "string não vazia": `bool("false")` valendo `true` seria a
         // coerção mais traiçoeira possível num operando de branch.
         return bad(
-          `bool() sobre string aceita apenas "true" ou "false", e recebeu ${JSON.stringify(value)}.`,
-          'Compare explicitamente: `state.x == "sim"`.',
+          msg('bool-string-domain', { value: JSON.stringify(value) }),
+          msg0('bool-string-domain-hint'),
         );
       }
-      return bad(`bool() não se aplica a ${kindOf(value)}.`);
+      return bad(msg('bool-not-applicable', { kind: kindOf(value) }));
     },
   },
 

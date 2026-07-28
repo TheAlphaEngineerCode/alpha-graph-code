@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compile } from './index.js';
+import { compile, renderMessage, type MessageRef } from './index.js';
 import type { ChannelSchema } from './types.js';
 
 /** Espelha o exemplo de `specs/ir-v1.md` §2, inclusive os canais com `initial: null`. */
@@ -17,6 +17,11 @@ const SCHEMA: ChannelSchema = {
   },
 };
 
+/** Texto de uma sugestão, para quando a prosa renderizada é o que está sob teste. */
+function render(ref: MessageRef | undefined): string {
+  return ref === undefined ? '' : renderMessage(ref);
+}
+
 function check(source: string) {
   return compile(source, SCHEMA);
 }
@@ -25,7 +30,7 @@ function accepts(source: string): void {
   const result = check(source);
   if (!result.ok) {
     throw new Error(
-      `recusou \`${source}\`: ${result.diagnostics.map((d) => d.message).join('; ')}`,
+      `recusou \`${source}\`: ${result.diagnostics.map((d) => d.message.id).join('; ')}`,
     );
   }
 }
@@ -43,18 +48,18 @@ describe('o que a linguagem existe para pegar', () => {
     // É o exemplo da spec. Numa linguagem dinâmica viraria `undefined < 0.8 === false`
     // e um branch errado, silencioso, em produção.
     const d = rejects('state.confidenc < 0.8', 'AGX-E310');
-    expect(d?.suggestion).toContain('state.confidence');
+    expect(render(d?.suggestion)).toContain('state.confidence');
   });
 
   it('sugere mesmo com letras trocadas de lugar', () => {
     const d = rejects('state.cofnidence > 0', 'AGX-E310');
-    expect(d?.suggestion).toContain('confidence');
+    expect(render(d?.suggestion)).toContain('confidence');
   });
 
   it('não inventa sugestão quando nada é parecido', () => {
     // Sugestão errada é pior que nenhuma: manda investigar o lugar errado.
     const d = rejects('state.zzzzzzzz > 0', 'AGX-E310');
-    expect(d?.suggestion).not.toContain('Você quis dizer');
+    expect(d?.suggestion?.id).not.toBe('did-you-mean-channel');
   });
 
   it('comparar número com string é erro, não `false`', () => {
@@ -63,7 +68,7 @@ describe('o que a linguagem existe para pegar', () => {
 
   it('função fora da lista fechada é recusada com sugestão', () => {
     const d = rejects('lenght(state.findings) > 0', 'AGX-E311');
-    expect(d?.suggestion).toContain('len');
+    expect(render(d?.suggestion)).toContain('len');
   });
 
   it('aridade errada é recusada', () => {
@@ -91,7 +96,7 @@ describe('nulidade (ADR-0005)', () => {
 
   it('recusa argumento anulável em função que não trata nulo', () => {
     const d = rejects('len(state.query) > 0', 'AGX-E322');
-    expect(d?.suggestion).toContain('coalesce');
+    expect(d?.suggestion?.id).toBe('use-coalesce-hint');
   });
 
   it('`coalesce` é a saída, e destrava as três recusas acima', () => {
@@ -106,7 +111,7 @@ describe('nulidade (ADR-0005)', () => {
     // devolvido era `""` — um erro de tipo que o typecheck deixava passar para o runtime.
     // Encontrado por teste de propriedade, não por exemplo.
     const d = rejects('-coalesce("", 0) > 1', 'AGX-E320');
-    expect(d?.suggestion).toContain('mesmo tipo');
+    expect(d?.suggestion?.id).toBe('coalesce-type-mismatch-hint');
     accepts('coalesce(state.query, "padrão") == "x"');
   });
 
@@ -148,7 +153,7 @@ describe('`in` é pertencimento, nunca substring', () => {
 
   it('recusa sobre string e aponta `contains`', () => {
     const d = rejects('"ab" in state.decision', 'AGX-E321');
-    expect(d?.suggestion).toContain('contains');
+    expect(d?.suggestion?.id).toBe('use-contains-hint');
   });
 
   it('recusa chave não string em object', () => {
@@ -169,7 +174,7 @@ describe('aritmética e booleanos', () => {
 
   it('recusa valor não booleano em `&&`', () => {
     const d = rejects('state.iteration && state.approved', 'AGX-E320');
-    expect(d?.suggestion).toContain('explicitamente');
+    expect(d?.suggestion?.id).toBe('no-boolean-coercion-hint');
   });
 
   it('recusa `!` sobre não booleano', () => {
@@ -184,7 +189,7 @@ describe('matches: padrão literal, validado ao salvar (ADR-0003)', () => {
 
   it('recusa padrão vindo do estado', () => {
     const d = rejects('matches(coalesce(state.query, ""), state.decision)', 'AGX-E330');
-    expect(d?.suggestion).toContain('não pode vir do estado');
+    expect(d?.suggestion?.id).toBe('pattern-must-be-literal-hint');
   });
 
   it('recusa regex inválida em tempo de validação, e não de execução', () => {
@@ -208,7 +213,7 @@ describe('raízes de caminho', () => {
 
   it('recusa campo inexistente em `run`, com sugestão', () => {
     const d = rejects('run.attemp > 1', 'AGX-E310');
-    expect(d?.suggestion).toContain('run.attempt');
+    expect(render(d?.suggestion)).toContain('run.attempt');
   });
 
   it('trata como desconhecido o que o schema de canais não descreve', () => {
@@ -228,7 +233,7 @@ describe('raízes de caminho', () => {
       inputs: { pergunta: { base: 'string', nullable: false } },
     });
     expect(wrong.ok).toBe(false);
-    if (!wrong.ok) expect(wrong.diagnostics[0]?.suggestion).toContain('pergunta');
+    if (!wrong.ok) expect(render(wrong.diagnostics[0]?.suggestion)).toContain('pergunta');
   });
 });
 

@@ -1,5 +1,5 @@
 import { sliceCodePoints, toCodePoints } from './codepoints.js';
-import { diagnostic, err, ok, type Result, type Span } from './diagnostics.js';
+import { diagnostic, err, msg, msg0, ok, type Result, type Span } from './diagnostics.js';
 
 export type TokenKind =
   | 'number'
@@ -152,16 +152,16 @@ export function tokenize(source: string): Result<readonly Token[]> {
       return err(
         diagnostic(
           'AGX-E301',
-          'AGX-Expr não tem atribuição.',
+          msg0('no-assignment'),
           { start, end: cursor.position },
-          'Para comparar, use `==`.',
+          msg0('use-equality-operator'),
         ),
       );
     }
 
     cursor.advance(1);
     return err(
-      diagnostic('AGX-E301', `Caractere inesperado: ${JSON.stringify(c)}.`, {
+      diagnostic('AGX-E301', msg('unexpected-character', { char: JSON.stringify(c) }), {
         start,
         end: cursor.position,
       }),
@@ -223,9 +223,9 @@ function readNumber(cursor: Cursor, start: number): Result<Token> {
     return err(
       diagnostic(
         'AGX-E301',
-        `Literal numérico fora da faixa representável: ${text}.`,
+        msg('numeric-literal-out-of-range', { literal: text }),
         { start, end: cursor.position },
-        'AGX-Expr não tem Infinity. Use um valor finito.',
+        msg0('no-infinity-use-finite'),
       ),
     );
   }
@@ -241,7 +241,7 @@ function readString(cursor: Cursor, start: number): Result<Token> {
     const c = cursor.next();
     if (c === undefined) {
       return err(
-        diagnostic('AGX-E301', 'String sem aspas de fechamento.', {
+        diagnostic('AGX-E301', msg0('unterminated-string'), {
           start,
           end: cursor.position,
         }),
@@ -257,7 +257,7 @@ function readString(cursor: Cursor, start: number): Result<Token> {
     const escaped = cursor.next();
     if (escaped === undefined) {
       return err(
-        diagnostic('AGX-E301', 'Escape incompleto no fim da string.', {
+        diagnostic('AGX-E301', msg0('incomplete-escape-in-string'), {
           start,
           end: cursor.position,
         }),
@@ -269,9 +269,9 @@ function readString(cursor: Cursor, start: number): Result<Token> {
       return err(
         diagnostic(
           'AGX-E301',
-          `Escape desconhecido: \\${escaped}.`,
+          msg('unknown-escape', { escape: escaped }),
           { start, end: cursor.position },
-          'Escapes válidos: \\\\ \\" \\\' \\n \\r \\t.',
+          msg0('valid-escapes'),
         ),
       );
     }

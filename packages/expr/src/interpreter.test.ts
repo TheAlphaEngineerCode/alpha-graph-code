@@ -37,7 +37,7 @@ const STATE: Record<string, ExprValue> = {
 function run(source: string, ctx: Partial<EvaluationContext> = {}) {
   const compiled = compile(source, SCHEMA);
   if (!compiled.ok) {
-    throw new Error(`${source}: ${compiled.diagnostics.map((d) => d.message).join('; ')}`);
+    throw new Error(`${source}: ${compiled.diagnostics.map((d) => d.message.id).join('; ')}`);
   }
   return evaluate(compiled.value.ast, {
     state: STATE,
@@ -48,7 +48,7 @@ function run(source: string, ctx: Partial<EvaluationContext> = {}) {
 
 function value(source: string, ctx: Partial<EvaluationContext> = {}): ExprValue {
   const result = run(source, ctx);
-  if (!result.ok) throw new Error(`${source}: ${result.error.message}`);
+  if (!result.ok) throw new Error(`${source}: ${result.error.message.id}`);
   return result.value;
 }
 
@@ -93,7 +93,7 @@ describe('raiz `in` — entradas mapeadas do nó', () => {
   // na Fase 3, quando o runtime começasse a fazer o binding de verdade.
   const ev = (source: string, inputs: Record<string, ExprValue>): ExprValue => {
     const result = evaluate(unwrap(parse(source)), { state: STATE, inputs });
-    if (!result.ok) throw new Error(`${source}: ${result.error.message}`);
+    if (!result.ok) throw new Error(`${source}: ${result.error.message.id}`);
     return result.value;
   };
 
@@ -143,8 +143,8 @@ describe('modelo numérico (ADR-0004)', () => {
     // caminho caro sem nenhum sinal no trace.
     const error = failure('state.cost / state.calls >= 0.5');
     expect(error.code).toBe('AGX-R311');
-    expect(error.message).toContain('Divisão por zero');
-    expect(error.suggestion).toContain('state.calls > 0');
+    expect(error.message.id).toBe('division-by-zero');
+    expect(error.suggestion?.id).toBe('guard-divisor-hint');
   });
 
   it('resto por zero também é erro', () => {
@@ -154,7 +154,7 @@ describe('modelo numérico (ADR-0004)', () => {
   it('overflow é erro, e não Infinity nem saturação', () => {
     const error = failure('1e308 * 10 > 0');
     expect(error.code).toBe('AGX-R311');
-    expect(error.message).toContain('fora da faixa');
+    expect(error.message.id).toBe('arith-out-of-range');
   });
 
   it('underflow para zero é permitido', () => {
@@ -198,14 +198,18 @@ describe('nenhum operando é coagido em silêncio', () => {
   };
 
   it('`!` sobre não booleano é erro, e não `false`', () => {
-    expect(naoBooleano('!state.documents[0]').message).toContain('espera bool');
-    expect(naoBooleano('!state.confidence').message).toContain('number');
+    expect(naoBooleano('!state.documents[0]').message.id).toBe('logical-operand-not-bool');
+    expect(naoBooleano('!state.confidence').message.params).toMatchObject({ received: 'number' });
   });
 
   it('`&&` e `||` exigem bool nos dois lados', () => {
-    expect(naoBooleano('state.documents[0] && state.approved').message).toContain('espera bool');
-    expect(naoBooleano('state.approved && state.documents[0]').message).toContain('espera bool');
-    expect(naoBooleano('state.documents[0] || state.approved').message).toContain('espera bool');
+    for (const source of [
+      'state.documents[0] && state.approved',
+      'state.approved && state.documents[0]',
+      'state.documents[0] || state.approved',
+    ]) {
+      expect(naoBooleano(source).message.id, source).toBe('logical-operand-not-bool');
+    }
   });
 
   it('o curto-circuito ainda protege o lado direito', () => {
@@ -338,11 +342,11 @@ describe('o interpretador nunca lança', () => {
     const result = evaluate(unwrap(parse('(1 / 0) + (2 / 0)')), { state: {} });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).toContain('Divisão por zero');
+    expect(result.error.message.id).toBe('division-by-zero');
   });
 });
 
 function unwrap(result: ReturnType<typeof parse>) {
-  if (!result.ok) throw new Error(result.diagnostics[0]?.message ?? 'parse falhou');
+  if (!result.ok) throw new Error(result.diagnostics[0]?.message.id ?? 'parse falhou');
   return result.value;
 }

@@ -31,11 +31,32 @@ export type {
 export {
   DIAGNOSTIC_CODES,
   formatDiagnostic,
+  msg,
+  msg0,
+  renderMessage,
   type Diagnostic,
   type DiagnosticCode,
+  type FormatOptions,
+  type MessageRef,
+  type NoParamMessageId,
   type Result,
   type Span,
 } from './diagnostics.js';
+
+export {
+  DEFAULT_LOCALE,
+  LOCALES,
+  MESSAGE_IDS,
+  catalogFor,
+  isLocale,
+  message,
+  resolveLocale,
+  type Catalog,
+  type Locale,
+  type MessageId,
+  type MessageParams,
+  type NoParams,
+} from './messages/index.js';
 
 export {
   DEFAULT_FUEL,

@@ -2,125 +2,126 @@
 
 # Alpha Graph Code
 
-**Um compilador de workflows de IA — não uma plataforma de execução.**
+**A compiler for AI workflows — not an execution platform.**
 
-Você descreve ou desenha o workflow. O sistema converte para a Alpha Graph IR, valida,
-simula passo a passo e compila para artefatos executáveis em runtimes de terceiros.
-Quem executa em produção é o runtime **do usuário**.
+You describe or draw the workflow. The system converts it to the Alpha Graph IR, validates it,
+simulates it step by step, and compiles it to executable artefacts for third-party runtimes.
+What runs it in production is **your** runtime.
 
 [![CI](https://github.com/TheAlphaEngineerCode/alpha-graph-code/actions/workflows/ci.yml/badge.svg)](https://github.com/TheAlphaEngineerCode/alpha-graph-code/actions/workflows/ci.yml)
-[![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue.svg)](./LICENSE)
-[![DCO](https://img.shields.io/badge/contribui%C3%A7%C3%A3o-DCO-lightgrey.svg)](./CONTRIBUTING.md)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![DCO](https://img.shields.io/badge/contributions-DCO-lightgrey.svg)](./CONTRIBUTING.md)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](./tsconfig.base.json)
-[![Fase](https://img.shields.io/badge/fase-1%20%C2%B7%20AGX--Expr-orange.svg)](./docs/IMPLEMENTATION_PLAN.md)
+[![Phase](https://img.shields.io/badge/phase-1%20%C2%B7%20AGX--Expr-orange.svg)](./docs/IMPLEMENTATION_PLAN.md)
 
 </div>
 
 ---
 
-## Estado atual: leia antes de clonar
+## Current state — read this before cloning
 
-**Este repositório está na Fase 1 de 9.** Existe a especificação normativa completa, o
-tooling, o CI — e **um pacote implementado**: [`packages/expr`](./packages/expr), a linguagem
-de condição AGX-Expr, com 244 testes.
+**This repository is at phase 1 of 9.** The complete normative specification exists, along with
+the tooling and CI — and **one implemented package**: [`packages/expr`](./packages/expr), the
+AGX-Expr condition language, with 278 tests.
 
-Os outros 11 pacotes são módulos vazios. **O CLI `agx` chega na Fase 4**, e é lá que o produto
-passa a ser demonstrável. Se você quer algo que rode hoje, volte nessa fase; o
-[plano de implementação](./docs/IMPLEMENTATION_PLAN.md) diz o que existe em cada uma.
+The other 11 packages are empty modules. **The `agx` CLI arrives in phase 4**, and that is when
+the product becomes demonstrable. If you want something that runs today, come back at that
+phase; the [implementation plan](./docs/IMPLEMENTATION_PLAN.md) says what exists in each one.
 
-A ordem é deliberada: a decisão que mais importa neste projeto é a **semântica da IR**, e ela
-é revisável agora, por leitura, enquanto custa nada mudar. Depois de 4 mil linhas de core,
-não é.
+The order is deliberate. The decision that matters most here is the **semantics of the IR**, and
+right now it is reviewable by reading, while changing it costs nothing. After four thousand
+lines of core, it is not.
 
 ---
 
-## O problema
+## The problem
 
-Ferramentas visuais para workflow de IA não faltam: Langflow, Flowise, Dify, n8n, Rivet,
-LangGraph Studio. Todas resolvem bem "arrastar nós e executar".
+There is no shortage of visual tools for AI workflows: Langflow, Flowise, Dify, n8n, Rivet,
+LangGraph Studio. They all solve "drag nodes and run" well.
 
-Todas guardam o grafo num **formato interno cujo único consumidor é elas mesmas**. Você
-desenha, roda, e o artefato que sobra só vale dentro daquela ferramenta. Trocar de framework
-significa redesenhar.
+They all store the graph in an **internal format whose only consumer is themselves**. You draw,
+you run, and the artefact left behind is only worth anything inside that tool. Switching
+frameworks means redrawing.
 
-Aqui a inversão é essa: **o grafo é a entrega, e a ferramenta é o compilador.**
+The inversion here is this: **the graph is the deliverable, and the tool is the compiler.**
 
-## O que isso muda na prática
+## What that changes in practice
 
-|                             | Ferramentas visuais                  | Alpha Graph Code                                       |
-| --------------------------- | ------------------------------------ | ------------------------------------------------------ |
-| O que é o grafo             | Configuração de um runtime próprio   | Artefato portátil e versionável                        |
-| Onde roda em produção       | Na nuvem da ferramenta               | No runtime que **você** escolheu                       |
-| Semântica de execução       | Mora no código do runtime            | Escrita em spec normativa, antes do código             |
-| Incompatibilidade de target | Default silencioso                   | `native` / `lowered` / `unsupported`, sempre declarada |
-| Condição de branch          | String estilo JS avaliada por `eval` | AGX-Expr: total, sandboxed, type-checked               |
+|                        | Visual tools                        | Alpha Graph Code                                      |
+| ---------------------- | ----------------------------------- | ----------------------------------------------------- |
+| What the graph is      | Configuration for their runtime     | A portable, versionable artefact                      |
+| Where production runs  | In the tool's cloud                 | On the runtime **you** chose                          |
+| Execution semantics    | Live in the runtime's code          | Written in a normative spec, before the code          |
+| Target incompatibility | A silent default                    | `native` / `lowered` / `unsupported`, always declared |
+| Branch conditions      | JS-style strings run through `eval` | AGX-Expr: total, sandboxed, type-checked              |
 
-## As quatro decisões que sustentam isso
+## The four decisions that hold this up
 
-Não são features. São as quatro coisas que, se ficarem indefinidas, fazem portabilidade virar
-marketing — porque a semântica real passa a morar no código do runtime.
+These are not features. They are the four things that, left undecided, turn portability into
+marketing — because the real semantics move into the runtime's code.
 
-**1. Estado é canal com reducer declarado.** Dois nós em paralelo escrevendo a mesma chave:
-quem vence? A resposta não pode ser "a ordem de conclusão das chamadas de rede", porque isso é
-um bug intermitente e irreproduzível. Cada canal declara `replace`, `append`, `merge`, `max`,
-`min`, `sum` ou `custom`. Canal escrito por ramos concorrentes **exige** reducer comutativo e
-associativo — `replace` sob fan-in é erro de validação, não surpresa em produção.
+**1. State is a channel with a declared reducer.** Two nodes writing the same key in parallel:
+who wins? The answer cannot be "whichever network call finished first", because that is an
+intermittent, irreproducible bug. Each channel declares `replace`, `append`, `merge`, `max`,
+`min`, `sum` or `custom`. A channel written by concurrent branches **must** declare a commutative
+and associative reducer — `replace` under fan-in is a validation error, not a surprise in
+production.
 
-**2. Roteamento é first-match, e fan-out é explícito.** Arestas são ordenadas; a primeira
-branch verdadeira vence; `otherwise` é obrigatório. Seguir vários caminhos ao mesmo tempo exige
-um nó `parallel`. Sem isso, duas arestas com condição sobreposta significam coisas diferentes
-em runtimes diferentes — e o mesmo arquivo produz resultados diferentes.
+**2. Routing is first-match, and fan-out is explicit.** Edges are ordered; the first true branch
+wins; `otherwise` is mandatory. Following several paths at once requires a `parallel` node.
+Without that rule, two edges with overlapping conditions mean different things on different
+runtimes — and the same file produces different results.
 
-**3. Condição não é JavaScript.** Um arquivo de grafo foi desenhado para circular em pull
-request. Avaliar `state.confidence < 0.8` com `eval` transforma o formato num vetor de execução
-arbitrária. AGX-Expr é uma linguagem própria: total, sem acesso a host, sem I/O, com limite de
-fuel, interpretada por código nosso. Ganho colateral que se sente todo dia:
-`state.confidenc < 0.8` **falha ao salvar**, com sugestão do nome certo — em vez de virar
-`undefined < 0.8 === false` e um branch errado silencioso.
+**3. A condition is not JavaScript.** A graph file is designed to travel through pull requests.
+Evaluating `state.confidence < 0.8` with `eval` turns the format into an arbitrary-execution
+vector. AGX-Expr is a language of its own: total, no host access, no I/O, fuel-limited,
+interpreted by our own code. The side benefit shows up daily —
+`state.confidenc < 0.8` **fails when you save**, with the correct name suggested, instead of
+becoming `undefined < 0.8 === false` and a silently wrong branch.
 
-**4. Falha é caminho comum, não exceção.** Num grafo onde a maioria dos nós chama rede ou
-modelo, erro acontece. Todo nó tem porta de erro implícita, arestas declaram `on_error`, e a
-precedência é normativa: retry do nó → aresta `on_error` → guard do subgraph → política global.
+**4. Failure is the common path, not the exception.** In a graph where most nodes call a network
+or a model, errors happen. Every node has an implicit error port, edges declare `on_error`, and
+the precedence is normative: node retry → `on_error` edge → subgraph guard → global policy.
 
-A especificação completa está em **[`specs/ir-v1.md`](./specs/ir-v1.md)**, e ela é
-**normativa**: se o código divergir da spec, o código está errado.
+The full specification lives in **[`specs/ir-v1.md`](./specs/ir-v1.md)**, and it is
+**normative**: if the code diverges from the spec, the code is wrong.
 
-## O que este projeto não é
+## What this project is not
 
-Não-objetivos são decisões, não lacunas a preencher:
+Non-goals are decisions, not gaps waiting to be filled:
 
-- **Não é um runtime hospedado.** Simulação existe para inspecionar, não para servir tráfego.
-- **Não é um marketplace de integrações.** Ferramentas entram pela interface de tool calling
-  do usuário.
-- **Não é automação genérica.** Sem webhook, cron, planilha ou e-mail no core.
-- **Não é SaaS.** Contas, billing e colaboração ficam fora do caminho crítico. `git clone` e
-  uma chave de API opcional bastam.
-- **Não promete portabilidade perfeita.** Targets têm capacidades diferentes. O produto torna
-  as diferenças **explícitas** em vez de esconder.
+- **Not a hosted runtime.** Simulation exists to inspect, not to serve traffic.
+- **Not an integrations marketplace.** Tools come in through the user's own tool-calling
+  interface.
+- **Not general-purpose automation.** No webhooks, cron, spreadsheets or email in the core.
+- **Not a SaaS.** Accounts, billing and collaboration stay off the critical path. `git clone`
+  and an optional API key are enough.
+- **No promise of perfect portability.** Targets have different capabilities. The product makes
+  the differences **explicit** instead of hiding them.
 
-## Para quem é
+## Who this is for
 
-O primeiro usuário não é quem quer montar um chatbot arrastando caixas — esse público já é bem
-servido. É **o engenheiro que já escreve workflows agentic em código** e sofre com revisão,
-versionamento e migração entre frameworks. Esse usuário aceita CLI, lê spec e contribui
-exporter — e é exatamente quem valida a tese da IR.
+The first user is not someone assembling a chatbot by dragging boxes — that audience is already
+well served. It is **the engineer who already writes agentic workflows in code** and struggles
+with review, versioning and migration between frameworks. That user accepts a CLI, reads a spec
+and contributes an exporter — and is exactly who validates the thesis behind the IR.
 
-O canvas amplia o público depois. Ele não é o que conquista o primeiro.
+The canvas widens the audience later. It is not what wins the first user.
 
-## Começando
+## Getting started
 
 ```bash
 git clone https://github.com/TheAlphaEngineerCode/alpha-graph-code.git
 cd alpha-graph-code
 
-npm i -g pnpm     # se necessário; requer Node >= 22.13
+npm i -g pnpm     # if needed; requires Node >= 22.13
 pnpm install
 pnpm check        # lint + format + typecheck + test + build
 ```
 
-`pnpm check` é exatamente o que o CI roda.
+`pnpm check` is exactly what CI runs.
 
-A partir da **Fase 4**:
+From **phase 4** onwards:
 
 ```bash
 pnpm agx validate templates/planner-executor-verifier.yaml
@@ -128,50 +129,57 @@ pnpm agx simulate templates/planner-executor-verifier.yaml --cassette happy
 pnpm agx compile  templates/planner-executor-verifier.yaml --target langgraph
 ```
 
-## Como o repositório é organizado
+Diagnostics are available in **English, Brazilian Portuguese and Spanish** — the locale is a
+choice made by the caller, and it never changes the diagnostic code or the trace
+([ADR-0006](./docs/decisions/ADR-0006-diagnostics-i18n.md)).
+
+## How the repository is organised
 
 ```text
-packages/expr        AGX-Expr: lexer, parser, typechecker, interpretador
-packages/graph-core  IR, schema, parser, validador, normalização, migrations
+packages/expr        AGX-Expr: lexer, parser, typechecker, interpreter
+packages/graph-core  IR, schema, parser, validator, normalisation, migrations
 packages/runtime     executor, reducers, checkpoints, cassettes, trace
-packages/compiler    pipeline, capability model, diagnósticos
+packages/compiler    pipeline, capability model, diagnostics
 packages/exporters/  json · yaml · prompt · langgraph
 packages/cli         agx
-apps/web             Studio (a partir da v0.2)
+apps/web             Studio (from v0.2)
 
-specs/               ir-v1 · agx-expr · trace-v1 · lowerings   ← NORMATIVO
+specs/               ir-v1 · agx-expr · trace-v1 · lowerings   ← NORMATIVE
 docs/decisions/      ADRs
-evals/               harness de prompt-to-graph
-cassettes/           gravações de record/replay
+evals/               prompt-to-graph harness
+cassettes/           record/replay recordings
 ```
 
-| Documento                                                      | Para quê                                      |
+| Document                                                       | What it is for                                |
 | -------------------------------------------------------------- | --------------------------------------------- |
-| [`specs/ir-v1.md`](./specs/ir-v1.md)                           | A IR. Fonte da verdade do projeto             |
-| [`specs/agx-expr.md`](./specs/agx-expr.md)                     | A linguagem de condição                       |
-| [`specs/trace-v1.md`](./specs/trace-v1.md)                     | Trace, cassettes e record/replay              |
-| [`specs/lowerings.md`](./specs/lowerings.md)                   | Capability model e catálogo de transformações |
-| [`AGENTS.md`](./AGENTS.md)                                     | Os 12 invariantes. Violar um é bug            |
-| [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md) | Fases, critérios de saída, riscos             |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md)                         | Portão de qualidade e DCO                     |
-| [`SECURITY.md`](./SECURITY.md)                                 | Modelo de ameaça e como reportar              |
+| [`specs/ir-v1.md`](./specs/ir-v1.md)                           | The IR. The project's source of truth         |
+| [`specs/agx-expr.md`](./specs/agx-expr.md)                     | The condition language                        |
+| [`specs/trace-v1.md`](./specs/trace-v1.md)                     | Trace, cassettes and record/replay            |
+| [`specs/lowerings.md`](./specs/lowerings.md)                   | Capability model and transformation catalogue |
+| [`AGENTS.md`](./AGENTS.md)                                     | The 12 invariants. Violating one is a bug     |
+| [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md) | Phases, exit criteria, risks                  |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md)                         | Quality gate and DCO                          |
+| [`SECURITY.md`](./SECURITY.md)                                 | Threat model and how to report                |
 
-## Determinismo, e por que ele é testável
+## Determinism, and why it is testable
 
-> Mesma entrada + mesma cassette ⇒ **mesmo trace, byte a byte.**
+> Same input + same cassette ⇒ **the same trace, byte for byte.**
 
-Isso não é aspiração: é a asserção usada nos testes de integração. A fronteira de execução
-segue ordem de declaração — jamais ordem de conclusão de I/O. O RNG é semeado por `run_id`. O
-relógio é injetado, e `now()` em AGX-Expr lê o clock do run, nunca o do host.
+That is not an aspiration: it is the assertion used in the integration tests. The execution
+frontier follows declaration order — never the order in which I/O completed. The RNG is seeded
+by `run_id`. The clock is injected, and `now()` in AGX-Expr reads the run's clock, never the
+host's.
 
-O bug caro em workflow de IA quase nunca é "não rodou". É "rodou diferente".
+The expensive bug in an AI workflow is almost never "it didn't run". It is "it ran differently".
 
-## Contribuindo
+## Contributing
 
-Leia [`CONTRIBUTING.md`](./CONTRIBUTING.md). O resumo: commits com sign-off (`git commit -s`),
-`pnpm check` verde, e mudança de semântica da IR passa por ADR **antes** do código.
+Read [`CONTRIBUTING.md`](./CONTRIBUTING.md). The short version: sign off your commits
+(`git commit -s`), keep `pnpm check` green, and any change to IR semantics goes through an ADR
+**before** the code.
 
-## Licença
+## License
 
-[Apache-2.0](./LICENSE), com contribuição por DCO. A decisão e as alternativas descartadas
-estão em [ADR-0001](./docs/decisions/ADR-0001-licenca-apache-2.0-e-dco.md).
+[Apache-2.0](./LICENSE), with contributions under the DCO. The decision and the alternatives
+that were rejected are recorded in
+[ADR-0001](./docs/decisions/ADR-0001-licenca-apache-2.0-e-dco.md).

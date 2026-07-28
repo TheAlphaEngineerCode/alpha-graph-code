@@ -8,6 +8,7 @@ Você descreve ou desenha o workflow. O sistema converte para a Alpha Graph IR, 
 simula passo a passo e compila para artefatos executáveis em runtimes de terceiros.
 Quem executa em produção é o runtime **do usuário**.
 
+[![CI](https://github.com/TheAlphaEngineerCode/alpha-graph-code/actions/workflows/ci.yml/badge.svg)](https://github.com/TheAlphaEngineerCode/alpha-graph-code/actions/workflows/ci.yml)
 [![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue.svg)](./LICENSE)
 [![DCO](https://img.shields.io/badge/contribui%C3%A7%C3%A3o-DCO-lightgrey.svg)](./CONTRIBUTING.md)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](./tsconfig.base.json)

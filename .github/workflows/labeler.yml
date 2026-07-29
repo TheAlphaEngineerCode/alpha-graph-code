@@ -15,7 +15,7 @@ jobs:
     steps:
       # No contributor code is checked out or executed under this privileged
       # event. The official action reads configuration from the base branch.
-      - uses: actions/labeler@v6
+      - uses: actions/labeler@v7
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           sync-labels: true

@@ -27,11 +27,11 @@ jobs:
         node: ["22", "24"]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -62,7 +62,7 @@ jobs:
     name: Nenhuma avaliação dinâmica
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Varrer packages e apps
         run: |
@@ -107,7 +107,7 @@ jobs:
       !startsWith(github.head_ref, 'release-please--')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

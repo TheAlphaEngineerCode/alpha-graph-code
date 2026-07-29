@@ -1,0 +1,82 @@
+name: Bug report
+description: Report reproducible behavior that violates a specification or documented contract
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Alpha Graph Code. Security vulnerabilities must be reported through the process in `SECURITY.md`, not in a public issue.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the observed behavior and why it is a defect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest graph, expression, fixture, or command that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Validate ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Cite the relevant specification or documented contract when possible.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the package version or full commit SHA.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - AGX-Expr
+        - Graph core or IR
+        - Runtime or simulation
+        - Compiler or exporter
+        - CLI
+        - Studio
+        - Documentation or specification
+        - CI or developer tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the operating system, Node.js version, pnpm version, and other relevant details.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues for the same behavior.
+          required: true
+        - label: This report does not contain credentials, secrets, or sensitive data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

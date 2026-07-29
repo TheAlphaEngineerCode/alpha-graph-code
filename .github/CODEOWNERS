@@ -1,0 +1,8 @@
+# A resolvable owner keeps review routing explicit for external contributors.
+* @TheAlphaEngineerCode
+
+/.github/          @TheAlphaEngineerCode
+/packages/expr/    @TheAlphaEngineerCode
+/packages/graph-core/ @TheAlphaEngineerCode
+/packages/compiler/ @TheAlphaEngineerCode
+/specs/            @TheAlphaEngineerCode

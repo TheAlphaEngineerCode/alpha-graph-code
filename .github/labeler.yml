@@ -1,0 +1,33 @@
+changed-files-labels-limit: 5
+max-files-changed: 500
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+
+specification:
+  - changed-files:
+      - any-glob-to-any-file: ["specs/**"]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ["**/package.json", "pnpm-lock.yaml"]
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.test.ts"
+          - "**/*.spec.ts"
+          - "tests/**"
+
+compiler:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/compiler/**", "packages/exporters/**"]
+
+runtime:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/runtime/**"]

@@ -1,0 +1,78 @@
+name: Specification or feature proposal
+description: Propose a change while preserving the project's invariants and non-goals
+title: "proposal: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Alpha Graph IR is normative. Semantic changes require a specification change and an ADR before implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user or interoperability problem without prescribing an implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Concrete use case
+      description: Show a small graph or workflow that cannot be expressed safely today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed contract
+      description: Describe the observable behavior, including errors and compatibility expectations.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: boundary
+    attributes:
+      label: Primary boundary
+      options:
+        - Specification or IR semantics
+        - Expression language
+        - Validation or diagnostics
+        - Runtime or simulation
+        - Compiler or exporter
+        - CLI
+        - Studio
+        - Documentation or developer experience
+    validations:
+      required: true
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Invariants and trade-offs
+      description: Identify affected AGENTS.md invariants, determinism, portability, or security trade-offs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain workarounds or smaller changes that were considered.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Scope checks
+      options:
+        - label: I read `AGENTS.md`, the normative specifications, and the project non-goals.
+          required: true
+        - label: The proposal does not add hosted execution, generic automation, or SaaS connectors to the core.
+          required: true
+        - label: I understand that semantic changes require an ADR and specification update before code.
+          required: true

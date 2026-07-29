@@ -1,0 +1,57 @@
+name: Welcome contributors
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  issue:
+    name: Welcome first-time issue authors
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.issue.author_association == 'FIRST_TIMER' ||
+       github.event.issue.author_association == 'FIRST_TIME_CONTRIBUTOR')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                "Thanks for helping improve Alpha Graph Code.",
+                "",
+                "Please link the relevant IR specification or implementation phase. Security reports belong in a private advisory."
+              ].join("\n")
+            });
+
+  pull-request:
+    name: Welcome first-time pull request authors
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      (github.event.pull_request.author_association == 'FIRST_TIMER' ||
+       github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                "Thanks for your first contribution to Alpha Graph Code.",
+                "",
+                "Please confirm the DCO sign-off and the invariant checklist while CI runs. A maintainer will review the result."
+              ].join("\n")
+            });

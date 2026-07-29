@@ -68,20 +68,20 @@ jobs:
           set -uo pipefail
 
           # `apps/` só existe a partir da v0.2, então a lista é montada, não fixa.
-          dirs=""
+          dirs=()
           for d in packages apps; do
-            [ -d "$d" ] && dirs="$dirs $d"
+            [ -d "$d" ] && dirs+=("$d")
           done
-          if [ -z "$dirs" ]; then
+          if [ "${#dirs[@]}" -eq 0 ]; then
             echo "::error::Nada para varrer. O layout do repositório mudou e este check parou de olhar."
             exit 1
           fi
 
           # Uma varredura que não olhou arquivo nenhum passaria em silêncio e
           # pareceria idêntica a uma varredura limpa. Contar é o que separa as duas.
-          count=$(find $dirs \( -name '*.ts' -o -name '*.tsx' -o -name '*.mts' \) \
+          count=$(find "${dirs[@]}" \( -name '*.ts' -o -name '*.tsx' -o -name '*.mts' \) \
                     -not -path '*/node_modules/*' -not -path '*/dist/*' | wc -l)
-          echo "Varrendo $count arquivos em$dirs"
+          echo "Varrendo $count arquivos em ${dirs[*]}"
           if [ "$count" -eq 0 ]; then
             echo "::error::A varredura não encontrou arquivo algum. Check que não pode falhar não é check."
             exit 1
@@ -91,7 +91,7 @@ jobs:
           if grep -rInE "$patterns" \
                --include='*.ts' --include='*.tsx' --include='*.mts' \
                --exclude-dir=node_modules --exclude-dir=dist \
-               $dirs; then
+               "${dirs[@]}"; then
             echo "::error::Invariante 3 violado: avaliação dinâmica encontrada. Use packages/expr (AGX-Expr)."
             exit 1
           fi

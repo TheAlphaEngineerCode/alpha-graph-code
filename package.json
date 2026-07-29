@@ -1,6 +1,6 @@
 {
   "name": "alpha-graph-code",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "private": true,
   "description": "Compilador de workflows de IA com IDE visual. A IR é o produto; o runtime é do usuário.",
   "license": "Apache-2.0",

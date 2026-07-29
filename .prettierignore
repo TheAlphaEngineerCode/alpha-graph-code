@@ -4,6 +4,8 @@ node_modules/
 .turbo/
 *.tsbuildinfo
 pnpm-lock.yaml
+.release-please-manifest.json
+CHANGELOG.md
 LICENSE
 
 # Cassettes e artefatos golden são gravados byte a byte: formatar quebraria a

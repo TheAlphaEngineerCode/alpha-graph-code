@@ -100,7 +100,11 @@ jobs:
 
   dco:
     name: DCO sign-off
-    if: github.event_name == 'pull_request'
+    # Release Please is a repository-owned bot and cannot add a DCO trailer to
+    # its generated commit. Human and third-party PRs still require sign-off.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !startsWith(github.head_ref, 'release-please--')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
